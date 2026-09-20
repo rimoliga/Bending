@@ -168,6 +168,18 @@ def pick_anchor(m: Maybe<&2, Ch.Chord>, +anchor: +List<Pc.Note>) -> +List<Pc.Not
     case Some{c}:
       harden(Ch.notes(c))
 
+# the last voicing of sol, or anchor if sol is empty
+def last_of(sol: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>) -> +List<Pc.Note>:
+  match sol:
+    case Nil{}:
+      anchor
+    case h <> +t:
+      match t:
+        case Nil{}:
+          h
+        case h2 <> t2:
+          last_of(t, h)
+
 def append_sol(xs: List<&2, +List<Pc.Note>>, ys: List<&2, +List<Pc.Note>>) -> List<&2, +List<Pc.Note>>:
   match xs:
     case Nil{}:

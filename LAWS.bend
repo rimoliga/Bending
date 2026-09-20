@@ -106,6 +106,15 @@ law solve_chain_bounded:
   for e: {VL.solve_chain(chords, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}
   {VL.chain_bounded(sol, anchor, n) == True{} : Bool}
 
+# LAW: same as solve_chain_bounded, for solve_parallel's split/join.
+law solve_parallel_bounded:
+  for +chords: +List<Ch.Chord>
+  for +n: Nat
+  for +anchor: +List<Pc.Note>
+  for sol: List<&2, +List<Pc.Note>>
+  for e: {VL.solve_parallel(chords, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}
+  {VL.chain_bounded(sol, anchor, n) == True{} : Bool}
+
 # Milestone 5: exercise generator
 # ================================
 

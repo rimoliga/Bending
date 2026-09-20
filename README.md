@@ -6,13 +6,11 @@ states its laws in `LAWS.bend` and proves them in `PROOF.bend`; `bend
 PROOF.bend` is the gate, and it must print `All terms check.` before a
 milestone is considered done.
 
-All five milestones are implemented; **10 of the laws stated are proved**
-(`bend PROOF.bend` → `All terms check.`). The one gap is noted where it
-is, not smoothed over: `solve_parallel` (Milestone 4's divide-and-conquer
-wrapper) is implemented and manually verified, reusing the sequential
-`solve_chain` whose own boundedness law *is* proved, but its own
-end-to-end proof needs two more lemmas not yet written — see Milestone
-4 below for exactly what they'd need to show.
+All five milestones are implemented, and **all 11 laws stated are proved**
+(`bend PROOF.bend` → `All terms check.`). Milestone 4's divide-and-conquer
+wrapper (`solve_parallel`) was initially shipped with its own boundedness
+unproved — a real, documented gap, not smoothed over — and was later closed
+with two more lemmas; see Milestone 4 below for how.
 
 ## Toolchain
 
@@ -180,7 +178,7 @@ musically unused, fallback.)
 Run `bend PROOF.bend` from the repo root to check all eight laws (three
 from Milestone 1, three from Milestone 2, two from Milestone 3).
 
-### Milestone 4 — Voice leading: core law proved; the parallel wrapper is implemented, not (yet) proved
+### Milestone 4 — Voice leading: done, all laws proved
 
 `src/voicelead.bend`.
 
@@ -224,15 +222,37 @@ left half's last chord) is computable directly from the chord list, with
 no need to wait for the left half's own result. That is what makes the two
 halves genuinely independent rather than one waiting on the other.
 Implemented and manually verified (a 4-chord progression run through it
-matches running it through `solve_chain` directly), but **its own
-boundedness is not proved**: doing so needs two more lemmas beyond
-`solve_chain`'s own (that `solve_chain`'s output multiset, restricted to
-knowing only chord data, ends on the closed voicing of the progression's
-last chord; and that `chain_bounded` composes across a list append) — each
-roughly comparable in size to the proof already done for `solve_chain`, and
-not completed here.
+matches running it through `solve_chain` directly), and its own
+boundedness — `solve_parallel_bounded` below — is proved too, on top of
+`solve_chain_bounded`, needing two more pieces:
 
-**Law proved** (`LAWS.bend`, proof in `PROOF.bend`):
+- **`chain_bounded` composes across a list append**: if `xs`'s own chain
+  (from a given anchor) is bounded, and `ys`'s chain (from `xs`'s *last*
+  voicing, `last_of(xs, anchor)` — or the given anchor itself if `xs` is
+  empty) is bounded, so is the chain of `append_sol(xs, ys)` from that same
+  anchor (`chain_bounded_append`, by induction on `xs`; needed two small
+  `Bool` lemmas, `Bool.and(a, b) == True` implies `a == True` and `b ==
+  True`, proved by the same discrimination-by-motive technique `Maybe`'s
+  lemmas used, plus `last_of(v <> vs, anchor) == last_of(vs, v)`, true
+  by `last_of`'s own definition rather than needing induction).
+- **`solve_chain`'s output always ends on the closed voicing of the
+  progression's last chord, independent of the anchor** (`solve_chain_last`)
+  — the fact that actually justifies running the two halves in parallel in
+  the first place, now proved rather than just asserted. Its own proof
+  needed `last_chord_total`/`last_chord_some` (recasting `last_chord`'s
+  `Maybe` into a plain value plus a connecting equality, since a
+  non-empty chord list always *has* a last chord — reasoning about "is it
+  `Some`" is otherwise awkward to carry through an induction) and a lemma
+  that `pick_anchor(last_chord(rest), harden(Ch.notes(c)))` doesn't depend
+  on that fallback argument at all once `rest`'s shape is known.
+
+Both proofs reuse the exact shape of `solve_chain_bounded`'s own proof (a
+`solve_chain_pick`-style dispatcher taking the search's `Bool`/`Maybe` as
+plain parameters, with the induction hypothesis threaded in as a small
+function argument) — once written for one property, adapting it for a
+second was mostly mechanical, not a new technique.
+
+**Laws proved** (`LAWS.bend`, proofs in `PROOF.bend`):
 
 - `solve_chain_bounded`: whenever `solve_chain` finds a solution, no voice
   in it ever moves more than `n` semitones between two consecutive chords
@@ -242,6 +262,11 @@ not completed here.
   technique) since matching a computed value is disallowed and the search
   logic (`solve_chain_pick`) has to be its own function taking `Bool`/
   `Maybe` as plain parameters — see `PROOF.bend`.
+- `solve_parallel_bounded`: the same guarantee for `solve_parallel`'s
+  output, built from `solve_chain_bounded` (applied to each half),
+  `solve_chain_last` (to show the two halves actually meet at the anchor
+  each expects) and `chain_bounded_append` (to glue their two bounded
+  chains into one).
 
 ### Milestone 5 — Exercise generator CLI: done, all laws proved
 
@@ -314,7 +339,7 @@ outside it.
   counted range over 12 concrete values, so all 144 branches are direct
   `{==}` checks, mechanically generated rather than hand-written.
 
-Run `bend PROOF.bend` from the repo root: **all ten laws across all five
+Run `bend PROOF.bend` from the repo root: **all 11 laws across all five
 milestones** check, printing `All terms check.`
 
 ## Known compiler friction (not a Bend issue report yet)
