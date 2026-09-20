@@ -60,6 +60,41 @@ def dom7_seventh(root: Pc.Note) -> Pc.Note:
 def tritone_sub(c: Chord) -> Chord:
   transpose(6n, c)
 
+# The other qualities a ii-V-i needs
+# ----------------------------------
+# min7 [0,3,7,10] and maj7 [0,4,7,11] complete the major ii-V-I;
+# min7b5 (half-diminished, [0,3,6,10]) and dim7 ([0,3,6,9]) are what a
+# *minor* ii-V-i is built from -- iiø7, V7 and a minor tonic -- and
+# dim7 doubles as the passing chord every standard is full of.
+#
+# Note the guide tones: min7 and min7b5 share the same 3rd and 7th
+# (intervals 3 and 10); the b5 is a chord *tone*, not a guide tone.
+# That is exactly why the minor ii-V-i's guide-tone motion is the same
+# as the major one's (see minor_ii_V_guide_tones in LAWS.bend), and
+# why telling iim7 from iiø7 on the guitar needs a voicing that
+# actually includes the 5th (src/exercise.bend's 3-note shapes).
+
+def min7(root: Pc.Note) -> Chord:
+  Chord{root, [0n, 3n, 7n, 10n]}
+
+def maj7(root: Pc.Note) -> Chord:
+  Chord{root, [0n, 4n, 7n, 11n]}
+
+def min7b5(root: Pc.Note) -> Chord:
+  Chord{root, [0n, 3n, 6n, 10n]}
+
+def min7b5_third(root: Pc.Note) -> Pc.Note:
+  Pc.transpose(3n, root)
+
+def min7b5_fifth(root: Pc.Note) -> Pc.Note:
+  Pc.transpose(6n, root)
+
+def min7b5_seventh(root: Pc.Note) -> Pc.Note:
+  Pc.transpose(10n, root)
+
+def dim7(root: Pc.Note) -> Chord:
+  Chord{root, [0n, 3n, 6n, 9n]}
+
 # Inversion
 # ---------
 # Inverting a chord once moves its lowest interval to the top: the

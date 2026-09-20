@@ -1017,3 +1017,38 @@ def solve_parallel_split_bounded(pair: +List<Ch.Chord> & +List<Ch.Chord>, +n: Na
 
 def Laws.solve_parallel_bounded(chords, n, anchor, sol, e):
   solve_parallel_split_bounded(VL.split_at(Nat.div(VL.len_chords(chords), 2n), chords), n, anchor, sol, e)
+
+# Extension 1: half-diminished and diminished 7th chords
+# =======================================================
+
+# dim7_minor_third_symmetry: both sides are 4-note lists whose first
+# three entries are literally the same term once transpose unfolds
+# (transposing by a concrete k is k applications of succ, so
+# transpose(3, transpose(3, root)) and transpose(6, root) share a
+# normal form, and so on). Only the last entry differs: the transposed
+# chord's 9th-above-its-own-root is succ applied 12 times to the
+# original root, where the inversion has the original root itself --
+# exactly transpose_period12, congruenced into that one list slot.
+def Laws.dim7_minor_third_symmetry(root):
+  Equal.cong(Pc.Note, List<Pc.Note>,
+    z => Pc.transpose(3n, root) <> Pc.transpose(6n, root) <> Pc.transpose(9n, root) <> z <> Nil{},
+    Pc.transpose(12n, root), root, transpose_period12(root))
+
+# minor_ii_V_guide_tones: the second half is a plain {==} -- the iiø7's
+# 7th is transpose(10, transpose(2, tonic)) and the V7's 3rd is
+# transpose(4, transpose(7, tonic)), which succ takes to 12 half steps
+# up from the tonic either way, and both sides share that normal form
+# with no wraparound to reason about. The first half needs the same
+# wraparound argument as tritone_sub_guide_tones: the V7's 7th is 7 +
+# 10 == 17 half steps above the tonic, which transpose_add12 brings
+# back to 5 -- the iiø7's 3rd, 2 + 3 half steps up.
+def Laws.minor_ii_V_guide_tones(tonic):
+  e1 = Laws.transpose_add(7n, 10n, tonic)
+  # e1 : {Pc.transpose(10n, Pc.transpose(7n, tonic)) == Pc.transpose(17n, tonic) : Pc.Note}
+  e2 = transpose_add12(5n, tonic)
+  # e2 : {Pc.transpose(17n, tonic) == Pc.transpose(5n, tonic) : Pc.Note}
+  common = Equal.trans(Pc.Note, Pc.transpose(10n, Pc.transpose(7n, tonic)), Pc.transpose(17n, tonic),
+    Pc.transpose(5n, tonic), e1, e2)
+  # common : {dom7_seventh(transpose(7, tonic)) == transpose(5, tonic) : Pc.Note}, and
+  # min7b5_third(transpose(2, tonic)) *is* transpose(5, tonic) by unfolding
+  (Equal.sym(Pc.Note, Pc.transpose(10n, Pc.transpose(7n, tonic)), Pc.transpose(5n, tonic), common), {==})

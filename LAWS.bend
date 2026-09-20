@@ -125,3 +125,28 @@ law cycle_of_fourths_visits_all:
   for start: Pc.Note
   for x: Pc.Note
   {Ch.count(x, Ex.cycle_of_fourths(start)) == 1n : Nat}
+
+# Extension 1: half-diminished and diminished 7th chords
+# =======================================================
+
+# LAW: a diminished 7th chord transposed up a minor third (3 half
+# steps) is the *same chord*, note for note, as its own first
+# inversion -- the reason there are only three distinct dim7 chords in
+# all of music, and the reason a dim7 shape slides up and down the
+# neck in minor thirds without changing what it sounds.
+law dim7_minor_third_symmetry:
+  for +root: Pc.Note
+  {Ch.notes(Ch.dim7(Pc.transpose(3n, root))) == Ch.notes(Ch.invert(Ch.dim7(root))) : List<Pc.Note>}
+
+# LAW: the guide tones of a minor ii-V move exactly like a major
+# one's. For every tonic: (1) the 3rd of the iiø7 (the min7b5 a major
+# 2nd above the tonic) is the same pitch class as the 7th of the V7
+# (a perfect 5th above) -- a common tone, held; and (2) the iiø7's
+# 7th sits one half step above the V7's 3rd (succ of the V7's 3rd is
+# the iiø7's 7th), so going ii -> V that voice steps down by a half
+# step. This is why the same two-note shell shapes work in minor and
+# in major: min7b5 and min7 share both guide tones.
+law minor_ii_V_guide_tones:
+  for +tonic: Pc.Note
+  {Ch.min7b5_third(Pc.transpose(2n, tonic)) == Ch.dom7_seventh(Pc.transpose(7n, tonic)) : Pc.Note} &
+  {Pc.succ(Ch.dom7_third(Pc.transpose(7n, tonic))) == Ch.min7b5_seventh(Pc.transpose(2n, tonic)) : Pc.Note}

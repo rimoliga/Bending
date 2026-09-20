@@ -358,6 +358,42 @@ outside it.
 Run `bend PROOF.bend` from the repo root: **all 11 laws across all five
 milestones** check, printing `All terms check.`
 
+### Extension 1 — Half-diminished and diminished 7ths: done, all laws proved
+
+`src/chord.bend`, `src/exercise.bend`.
+
+**Model.** `min7b5(root)` is `[0, 3, 6, 10]` (half-diminished, the iiø7 of a
+minor ii-V-i) and `dim7(root)` is `[0, 3, 6, 9]`; `min7` `[0, 3, 7, 10]` and
+`maj7` `[0, 4, 7, 11]` fill out the qualities the engine had been building
+ad hoc. `major_ii_v_i(tonic)` and `minor_ii_v_i(tonic)` (in
+`src/exercise.bend`) return the three chords of each cadence as a
+`+List<Chord>` — the form `solve_chain` consumes, so a minor ii-V-i can now
+be voice-led by the same search as a major one.
+
+The musically interesting part is what the two laws below say together.
+`min7b5` and `min7` have the *same* 3rd and 7th: the flat 5 is a chord tone,
+not a guide tone. So a guide-tone-only shell cannot tell iim7 from iiø7 —
+which is a fact about the instrument, not a shortcoming of the model, and the
+reason Extension 2's three-note shapes (which include the 5th) exist.
+
+**Laws proved** (`LAWS.bend`, proofs in `PROOF.bend`):
+
+- `dim7_minor_third_symmetry`: a dim7 transposed up a minor third is the
+  same chord, note for note, as its own first inversion — the reason there
+  are only three distinct dim7 chords in all of music and the reason the
+  shape slides up the neck in minor thirds. The proof is almost free in
+  this model: transposing by a concrete `k` is `k` applications of `succ`,
+  so three of the four notes share a normal form outright, and only the
+  last one — 12 half steps up from the original root, against that root
+  itself — needs `transpose_period12`, congruenced into that one list slot.
+- `minor_ii_V_guide_tones`: for every tonic, the iiø7's 3rd *is* the V7's
+  7th (a common tone, held), and the iiø7's 7th sits one half step above
+  the V7's 3rd (so that voice steps down by a half step). Second half is a
+  bare `{==}` (both sides are 12 half steps above the tonic, same normal
+  form, no wraparound); the first half needs the same wraparound argument
+  as `tritone_sub_guide_tones`, since the V7's 7th is 7 + 10 = 17 half
+  steps up and `transpose_add12` brings that back to 5.
+
 ## Known compiler friction (not a Bend issue report yet)
 
 - Recursive proof `def`s must list the argument that structurally shrinks

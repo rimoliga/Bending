@@ -294,6 +294,19 @@ def ii_v_i_shells(tonic: Pc.Note) -> Vc.Voicing & Vc.Voicing & Vc.Voicing:
        Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.B{})}, Vc.Fret{fG_V(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
        Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_I(Pc.B{})}, Vc.Fret{fG_I(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
 
+# The two ii-V-i progressions, as chords
+# --------------------------------------
+# Chord-level (not fretboard-level) progressions, the form
+# voicelead.bend's solve_chain consumes. The minor one is the reason
+# chord.bend grew min7b5: iiø7 - V7 - im7 is the minor-key cadence
+# most standards actually run on.
+
+def major_ii_v_i(+tonic: Pc.Note) -> +List<Ch.Chord>:
+  [Ch.min7(Pc.transpose(2n, tonic)), Ch.dom7(Pc.transpose(7n, tonic)), Ch.maj7(tonic)]
+
+def minor_ii_v_i(+tonic: Pc.Note) -> +List<Ch.Chord>:
+  [Ch.min7b5(Pc.transpose(2n, tonic)), Ch.dom7(Pc.transpose(7n, tonic)), Ch.min7(tonic)]
+
 # Cycle of fourths
 # ----------------
 # Repeatedly transposing by a perfect 4th (5 half steps) visits every
