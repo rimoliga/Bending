@@ -32,6 +32,8 @@ bend src/voicing.bend --check-only
 bend src/voicelead.bend --check-only
 bend src/exercise.bend --check-only
 bend main.bend            # or: bend main.bend <key>, e.g. bend main.bend Bb
+bend main.bend F minor 3  # flags: `minor` for iiø7-V7-im7, `3` for 3-note shells
+python3 tools/fretboard.py --shape 3   # printable practice sheet (no deps)
 ```
 
 ## Status by milestone
@@ -448,6 +450,46 @@ byte-identical to what it was before this extension.
   branches; changing the `3n` in the statement to `5n` makes `bend
   PROOF.bend` fail with `expected: 0n, observed: 1n`, so it is a real
   check and not a tautology.
+
+### Extension 3 — Printable practice sheet: `tools/fretboard.py`
+
+Outside Bend, by design: the calculation is what belongs in a proof assistant,
+and a chord diagram is not a calculation. The script computes nothing about
+music. It runs `bend main.bend <key>` once for each of the twelve keys **in
+the cycle of fourths** (C F Bb Eb Ab Db Gb B E A D G — the order musicians
+practice in, and the order `cycle_of_fourths_visits_all` proves really does
+reach all twelve), parses the engine's minimal text output, and draws the 36
+voicings as fretboard diagrams in one self-contained HTML page, styled for
+paper: open it and print it, or "Save as PDF" from the print dialog.
+
+```
+python3 tools/fretboard.py                    # 36 voicings, two-note shells
+python3 tools/fretboard.py --shape 3          # three-note shells
+python3 tools/fretboard.py --minor --shape 3  # the minor cadence
+python3 tools/fretboard.py --keys C,F -o x.html
+```
+
+No third-party packages and no network: inline SVG, the standard library, and
+the `bend` on your `PATH` (or `--bend /path/to/bend`). Each dot is labelled
+with the note it sounds — `R`, `3`, `7` — rather than a finger number, since
+which notes are sounding is the whole point of a shell voicing; a hollow
+circle above the nut is an open string, `×` is muted, and a number beside the
+top line is the starting fret. Each key is one `break-inside: avoid` block,
+so printing never splits a cadence across pages.
+
+[`docs/ii-V-I-practice.html`](docs/ii-V-I-practice.html) is a generated sample
+(the default: major, two-note shells, all twelve keys), committed so the
+output can be looked at without a working Bend install.
+
+The one piece of shared ground between the engine and the script is the
+output format, so it is kept deliberately dumb: one line per chord, a degree,
+a chord name, then one `<string><fret>:<role>` token per *sounding* string.
+The script re-derives nothing — the fret window it draws is justified by a
+fact Bend already proved (no voicing stretches more than four frets, one of
+the three conditions in `playable`), which is why five frets always suffice.
+It does check what it can: a malformed line, a missing chord or a key the
+engine didn't recognize (`main.bend` falls back to C) is an error or a
+warning, not a silently wrong diagram.
 
 ## Known compiler friction (not a Bend issue report yet)
 
