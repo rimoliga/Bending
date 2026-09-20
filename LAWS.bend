@@ -8,6 +8,7 @@ import Base
 import ./src/note.bend as Pc
 import ./src/chord.bend as Ch
 import ./src/negharm.bend as Nh
+import ./src/voicing.bend as Vc
 import ./src/voicelead.bend as VL
 import ./src/exercise.bend as Ex
 
@@ -150,3 +151,19 @@ law minor_ii_V_guide_tones:
   for +tonic: Pc.Note
   {Ch.min7b5_third(Pc.transpose(2n, tonic)) == Ch.dom7_seventh(Pc.transpose(7n, tonic)) : Pc.Note} &
   {Pc.succ(Ch.dom7_third(Pc.transpose(7n, tonic))) == Ch.min7b5_seventh(Pc.transpose(2n, tonic)) : Pc.Note}
+
+# Extension 2: three-note shell voicings
+# =======================================
+
+# LAW: the three-note shell really sounds the three notes it claims
+# to. Playability is already guaranteed by the Voicing type, but
+# nothing in that type says *which* pitch classes come out: the shape
+# juggles octaves (nearest_fret) and picks between two bass strings,
+# and this law is what rules out those choices quietly landing on the
+# wrong note. For every root, the min7 three-note shell sounds the
+# root, the minor 3rd and the minor 7th, each exactly once.
+law min7_shell3_sounds_root_3_7:
+  for +root: Pc.Note
+  {Ch.count(root, Vc.notes(Ex.min7_shell3(root))) == 1n : Nat} &
+  {Ch.count(Pc.transpose(3n, root), Vc.notes(Ex.min7_shell3(root))) == 1n : Nat} &
+  {Ch.count(Pc.transpose(10n, root), Vc.notes(Ex.min7_shell3(root))) == 1n : Nat}

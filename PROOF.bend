@@ -1052,3 +1052,35 @@ def Laws.minor_ii_V_guide_tones(tonic):
   # common : {dom7_seventh(transpose(7, tonic)) == transpose(5, tonic) : Pc.Note}, and
   # min7b5_third(transpose(2, tonic)) *is* transpose(5, tonic) by unfolding
   (Equal.sym(Pc.Note, Pc.transpose(10n, Pc.transpose(7n, tonic)), Pc.transpose(5n, tonic), common), {==})
+
+# min7_shell3_sounds_root_3_7: with the root concrete, the whole
+# shape computes -- both bass-string candidates, the octave choice,
+# and the pitch class each sounding string lands on -- so every
+# component is a literal count and closes by reflexivity. 12 cases,
+# three trivial-looking but genuinely computed checks each.
+def Laws.min7_shell3_sounds_root_3_7(root):
+  match root:
+    case Pc.C{}:
+      ({==}, {==}, {==})
+    case Pc.Db{}:
+      ({==}, {==}, {==})
+    case Pc.D{}:
+      ({==}, {==}, {==})
+    case Pc.Eb{}:
+      ({==}, {==}, {==})
+    case Pc.E{}:
+      ({==}, {==}, {==})
+    case Pc.F{}:
+      ({==}, {==}, {==})
+    case Pc.Gb{}:
+      ({==}, {==}, {==})
+    case Pc.G{}:
+      ({==}, {==}, {==})
+    case Pc.Ab{}:
+      ({==}, {==}, {==})
+    case Pc.A{}:
+      ({==}, {==}, {==})
+    case Pc.Bb{}:
+      ({==}, {==}, {==})
+    case Pc.B{}:
+      ({==}, {==}, {==})

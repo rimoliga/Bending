@@ -161,6 +161,155 @@ def maj7_shell(root: Pc.Note) -> Vc.Voicing:
     case Pc.B{}:
       Vc.Voicing{guide_tone_shell(Pc.B{}, 4n, 11n), {==}}
 
+# Three-note shell voicings (root + guide tones)
+# ----------------------------------------------
+# The two-note shells above leave the root to the bass player. The
+# three-note version puts it back, on whichever of the two bass
+# strings lands closer to the 3rd's fret (root_pick): a root a 5th
+# above the previous chord's is far up the A string but right next to
+# it on the low E, which is exactly why guitarists play Dm7 off the A
+# string and G7 off the E string. Choosing the string is a Bool
+# dispatch, so it needs its own function (Bend cannot match a computed
+# value), and both candidate Strings are built before the choice.
+#
+# Everything else is reused: the D and G frets are whatever the
+# caller already computed (guide_tone_shell's, or ii_v_i's chased
+# ones), so the same 5th/root logic serves the standalone shapes and
+# the voice-led progression.
+
+def root_pick(use_e: Bool, fE: Nat, fA: Nat, fD: Nat, fG: Nat) -> Vc.Strings:
+  match use_e:
+    case True{}:
+      Vc.Strings{Vc.Fret{fE}, Vc.Muted{}, Vc.Fret{fD}, Vc.Fret{fG}, Vc.Muted{}, Vc.Muted{}}
+    case False{}:
+      Vc.Strings{Vc.Muted{}, Vc.Fret{fA}, Vc.Fret{fD}, Vc.Fret{fG}, Vc.Muted{}, Vc.Muted{}}
+
+def shell3_strings(+root: Pc.Note, +fD: Nat, fG: Nat) -> Vc.Strings:
+  +fE = nearest_fret(fD, up_dist_note(Pc.E{}, root))
+  +fA = nearest_fret(fD, up_dist_note(Pc.A{}, root))
+  root_pick(Nat.is_le(abs_diff(fD, fE), abs_diff(fD, fA)), fE, fA, fD, fG)
+
+# the standalone three-note shape for one chord, root and intervals
+# given: the same D/G guide tones as guide_tone_shell, plus the root.
+def shell3_of(+root: Pc.Note, +third_iv: Nat, +seventh_iv: Nat) -> Vc.Strings:
+  +fD = up_dist_note(Pc.D{}, Pc.transpose(third_iv, root))
+  shell3_strings(root, fD, nearest_fret(fD, up_dist_note(Pc.G{}, Pc.transpose(seventh_iv, root))))
+
+# Playable for every root, proved the same way as the two-note shells:
+# one branch per concrete root, each closed by a bare {==}. min7b5
+# has the same guide tones as min7 (LAWS.bend's
+# minor_ii_V_guide_tones), so its three-note shell is the same shape
+# -- stated separately anyway, so the minor ii-V-i names the chord it
+# actually plays.
+
+def min7_shell3(root: Pc.Note) -> Vc.Voicing:
+  match root:
+    case Pc.C{}:
+      Vc.Voicing{shell3_of(Pc.C{}, 3n, 10n), {==}}
+    case Pc.Db{}:
+      Vc.Voicing{shell3_of(Pc.Db{}, 3n, 10n), {==}}
+    case Pc.D{}:
+      Vc.Voicing{shell3_of(Pc.D{}, 3n, 10n), {==}}
+    case Pc.Eb{}:
+      Vc.Voicing{shell3_of(Pc.Eb{}, 3n, 10n), {==}}
+    case Pc.E{}:
+      Vc.Voicing{shell3_of(Pc.E{}, 3n, 10n), {==}}
+    case Pc.F{}:
+      Vc.Voicing{shell3_of(Pc.F{}, 3n, 10n), {==}}
+    case Pc.Gb{}:
+      Vc.Voicing{shell3_of(Pc.Gb{}, 3n, 10n), {==}}
+    case Pc.G{}:
+      Vc.Voicing{shell3_of(Pc.G{}, 3n, 10n), {==}}
+    case Pc.Ab{}:
+      Vc.Voicing{shell3_of(Pc.Ab{}, 3n, 10n), {==}}
+    case Pc.A{}:
+      Vc.Voicing{shell3_of(Pc.A{}, 3n, 10n), {==}}
+    case Pc.Bb{}:
+      Vc.Voicing{shell3_of(Pc.Bb{}, 3n, 10n), {==}}
+    case Pc.B{}:
+      Vc.Voicing{shell3_of(Pc.B{}, 3n, 10n), {==}}
+
+def dom7_shell3(root: Pc.Note) -> Vc.Voicing:
+  match root:
+    case Pc.C{}:
+      Vc.Voicing{shell3_of(Pc.C{}, 4n, 10n), {==}}
+    case Pc.Db{}:
+      Vc.Voicing{shell3_of(Pc.Db{}, 4n, 10n), {==}}
+    case Pc.D{}:
+      Vc.Voicing{shell3_of(Pc.D{}, 4n, 10n), {==}}
+    case Pc.Eb{}:
+      Vc.Voicing{shell3_of(Pc.Eb{}, 4n, 10n), {==}}
+    case Pc.E{}:
+      Vc.Voicing{shell3_of(Pc.E{}, 4n, 10n), {==}}
+    case Pc.F{}:
+      Vc.Voicing{shell3_of(Pc.F{}, 4n, 10n), {==}}
+    case Pc.Gb{}:
+      Vc.Voicing{shell3_of(Pc.Gb{}, 4n, 10n), {==}}
+    case Pc.G{}:
+      Vc.Voicing{shell3_of(Pc.G{}, 4n, 10n), {==}}
+    case Pc.Ab{}:
+      Vc.Voicing{shell3_of(Pc.Ab{}, 4n, 10n), {==}}
+    case Pc.A{}:
+      Vc.Voicing{shell3_of(Pc.A{}, 4n, 10n), {==}}
+    case Pc.Bb{}:
+      Vc.Voicing{shell3_of(Pc.Bb{}, 4n, 10n), {==}}
+    case Pc.B{}:
+      Vc.Voicing{shell3_of(Pc.B{}, 4n, 10n), {==}}
+
+def maj7_shell3(root: Pc.Note) -> Vc.Voicing:
+  match root:
+    case Pc.C{}:
+      Vc.Voicing{shell3_of(Pc.C{}, 4n, 11n), {==}}
+    case Pc.Db{}:
+      Vc.Voicing{shell3_of(Pc.Db{}, 4n, 11n), {==}}
+    case Pc.D{}:
+      Vc.Voicing{shell3_of(Pc.D{}, 4n, 11n), {==}}
+    case Pc.Eb{}:
+      Vc.Voicing{shell3_of(Pc.Eb{}, 4n, 11n), {==}}
+    case Pc.E{}:
+      Vc.Voicing{shell3_of(Pc.E{}, 4n, 11n), {==}}
+    case Pc.F{}:
+      Vc.Voicing{shell3_of(Pc.F{}, 4n, 11n), {==}}
+    case Pc.Gb{}:
+      Vc.Voicing{shell3_of(Pc.Gb{}, 4n, 11n), {==}}
+    case Pc.G{}:
+      Vc.Voicing{shell3_of(Pc.G{}, 4n, 11n), {==}}
+    case Pc.Ab{}:
+      Vc.Voicing{shell3_of(Pc.Ab{}, 4n, 11n), {==}}
+    case Pc.A{}:
+      Vc.Voicing{shell3_of(Pc.A{}, 4n, 11n), {==}}
+    case Pc.Bb{}:
+      Vc.Voicing{shell3_of(Pc.Bb{}, 4n, 11n), {==}}
+    case Pc.B{}:
+      Vc.Voicing{shell3_of(Pc.B{}, 4n, 11n), {==}}
+
+def min7b5_shell3(root: Pc.Note) -> Vc.Voicing:
+  match root:
+    case Pc.C{}:
+      Vc.Voicing{shell3_of(Pc.C{}, 3n, 10n), {==}}
+    case Pc.Db{}:
+      Vc.Voicing{shell3_of(Pc.Db{}, 3n, 10n), {==}}
+    case Pc.D{}:
+      Vc.Voicing{shell3_of(Pc.D{}, 3n, 10n), {==}}
+    case Pc.Eb{}:
+      Vc.Voicing{shell3_of(Pc.Eb{}, 3n, 10n), {==}}
+    case Pc.E{}:
+      Vc.Voicing{shell3_of(Pc.E{}, 3n, 10n), {==}}
+    case Pc.F{}:
+      Vc.Voicing{shell3_of(Pc.F{}, 3n, 10n), {==}}
+    case Pc.Gb{}:
+      Vc.Voicing{shell3_of(Pc.Gb{}, 3n, 10n), {==}}
+    case Pc.G{}:
+      Vc.Voicing{shell3_of(Pc.G{}, 3n, 10n), {==}}
+    case Pc.Ab{}:
+      Vc.Voicing{shell3_of(Pc.Ab{}, 3n, 10n), {==}}
+    case Pc.A{}:
+      Vc.Voicing{shell3_of(Pc.A{}, 3n, 10n), {==}}
+    case Pc.Bb{}:
+      Vc.Voicing{shell3_of(Pc.Bb{}, 3n, 10n), {==}}
+    case Pc.B{}:
+      Vc.Voicing{shell3_of(Pc.B{}, 3n, 10n), {==}}
+
 # ii-V-I
 # ------
 # ii is min7 a major 2nd (2 half steps) above the tonic, V is dom7 a
@@ -293,6 +442,182 @@ def ii_v_i_shells(tonic: Pc.Note) -> Vc.Voicing & Vc.Voicing & Vc.Voicing:
       (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.B{})}, Vc.Fret{fG_ii(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
        Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.B{})}, Vc.Fret{fG_V(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
        Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_I(Pc.B{})}, Vc.Fret{fG_I(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+
+# Minor ii-V-i, and three-note versions of both
+# ---------------------------------------------
+# The minor cadence iiø7 - V7 - im7 reuses the major one's ii and V
+# frets outright: min7b5 and min7 share both guide tones (LAWS.bend's
+# minor_ii_V_guide_tones), so only the tonic chord changes shape, from
+# maj7's [4, 11] to min7's [3, 10].
+
+def i_pair_minor(+tonic: Pc.Note) -> Nat & Nat:
+  chord_step(fD_V(tonic), fG_V(tonic), tonic, 3n, 10n)
+
+def fD_i_min(+tonic: Pc.Note) -> Nat:
+  pair_fst(i_pair_minor(tonic))
+
+def fG_i_min(+tonic: Pc.Note) -> Nat:
+  pair_snd(i_pair_minor(tonic))
+
+# Each of the three blocks below is the same 12-way-match-then-{==}
+# check as ii_v_i_shells: every fret is concrete once the tonic is,
+# so playability is decided per key, by the compiler, not asserted.
+
+# iiø7 - V7 - im7, guide tones only (D and G strings).
+def ii_v_i_minor_shells(tonic: Pc.Note) -> Vc.Voicing & Vc.Voicing & Vc.Voicing:
+  match tonic:
+    case Pc.C{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.C{})}, Vc.Fret{fG_ii(Pc.C{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.C{})}, Vc.Fret{fG_V(Pc.C{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.C{})}, Vc.Fret{fG_i_min(Pc.C{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.Db{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.Db{})}, Vc.Fret{fG_ii(Pc.Db{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.Db{})}, Vc.Fret{fG_V(Pc.Db{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.Db{})}, Vc.Fret{fG_i_min(Pc.Db{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.D{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.D{})}, Vc.Fret{fG_ii(Pc.D{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.D{})}, Vc.Fret{fG_V(Pc.D{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.D{})}, Vc.Fret{fG_i_min(Pc.D{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.Eb{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.Eb{})}, Vc.Fret{fG_ii(Pc.Eb{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.Eb{})}, Vc.Fret{fG_V(Pc.Eb{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.Eb{})}, Vc.Fret{fG_i_min(Pc.Eb{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.E{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.E{})}, Vc.Fret{fG_ii(Pc.E{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.E{})}, Vc.Fret{fG_V(Pc.E{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.E{})}, Vc.Fret{fG_i_min(Pc.E{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.F{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.F{})}, Vc.Fret{fG_ii(Pc.F{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.F{})}, Vc.Fret{fG_V(Pc.F{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.F{})}, Vc.Fret{fG_i_min(Pc.F{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.Gb{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.Gb{})}, Vc.Fret{fG_ii(Pc.Gb{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.Gb{})}, Vc.Fret{fG_V(Pc.Gb{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.Gb{})}, Vc.Fret{fG_i_min(Pc.Gb{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.G{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.G{})}, Vc.Fret{fG_ii(Pc.G{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.G{})}, Vc.Fret{fG_V(Pc.G{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.G{})}, Vc.Fret{fG_i_min(Pc.G{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.Ab{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.Ab{})}, Vc.Fret{fG_ii(Pc.Ab{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.Ab{})}, Vc.Fret{fG_V(Pc.Ab{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.Ab{})}, Vc.Fret{fG_i_min(Pc.Ab{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.A{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.A{})}, Vc.Fret{fG_ii(Pc.A{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.A{})}, Vc.Fret{fG_V(Pc.A{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.A{})}, Vc.Fret{fG_i_min(Pc.A{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.Bb{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.Bb{})}, Vc.Fret{fG_ii(Pc.Bb{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.Bb{})}, Vc.Fret{fG_V(Pc.Bb{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.Bb{})}, Vc.Fret{fG_i_min(Pc.Bb{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+    case Pc.B{}:
+      (Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_ii(Pc.B{})}, Vc.Fret{fG_ii(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_V(Pc.B{})}, Vc.Fret{fG_V(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}},
+       Vc.Voicing{Vc.Strings{Vc.Muted{}, Vc.Muted{}, Vc.Fret{fD_i_min(Pc.B{})}, Vc.Fret{fG_i_min(Pc.B{})}, Vc.Muted{}, Vc.Muted{}}, {==}})
+
+# iim7 - V7 - Imaj7, root added on the nearer bass string.
+def ii_v_i_shells3(tonic: Pc.Note) -> Vc.Voicing & Vc.Voicing & Vc.Voicing:
+  match tonic:
+    case Pc.C{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.C{}), fD_ii(Pc.C{}), fG_ii(Pc.C{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.C{}), fD_V(Pc.C{}), fG_V(Pc.C{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.C{}, fD_I(Pc.C{}), fG_I(Pc.C{})), {==}})
+    case Pc.Db{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Db{}), fD_ii(Pc.Db{}), fG_ii(Pc.Db{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Db{}), fD_V(Pc.Db{}), fG_V(Pc.Db{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Db{}, fD_I(Pc.Db{}), fG_I(Pc.Db{})), {==}})
+    case Pc.D{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.D{}), fD_ii(Pc.D{}), fG_ii(Pc.D{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.D{}), fD_V(Pc.D{}), fG_V(Pc.D{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.D{}, fD_I(Pc.D{}), fG_I(Pc.D{})), {==}})
+    case Pc.Eb{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Eb{}), fD_ii(Pc.Eb{}), fG_ii(Pc.Eb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Eb{}), fD_V(Pc.Eb{}), fG_V(Pc.Eb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Eb{}, fD_I(Pc.Eb{}), fG_I(Pc.Eb{})), {==}})
+    case Pc.E{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.E{}), fD_ii(Pc.E{}), fG_ii(Pc.E{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.E{}), fD_V(Pc.E{}), fG_V(Pc.E{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.E{}, fD_I(Pc.E{}), fG_I(Pc.E{})), {==}})
+    case Pc.F{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.F{}), fD_ii(Pc.F{}), fG_ii(Pc.F{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.F{}), fD_V(Pc.F{}), fG_V(Pc.F{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.F{}, fD_I(Pc.F{}), fG_I(Pc.F{})), {==}})
+    case Pc.Gb{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Gb{}), fD_ii(Pc.Gb{}), fG_ii(Pc.Gb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Gb{}), fD_V(Pc.Gb{}), fG_V(Pc.Gb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Gb{}, fD_I(Pc.Gb{}), fG_I(Pc.Gb{})), {==}})
+    case Pc.G{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.G{}), fD_ii(Pc.G{}), fG_ii(Pc.G{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.G{}), fD_V(Pc.G{}), fG_V(Pc.G{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.G{}, fD_I(Pc.G{}), fG_I(Pc.G{})), {==}})
+    case Pc.Ab{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Ab{}), fD_ii(Pc.Ab{}), fG_ii(Pc.Ab{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Ab{}), fD_V(Pc.Ab{}), fG_V(Pc.Ab{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Ab{}, fD_I(Pc.Ab{}), fG_I(Pc.Ab{})), {==}})
+    case Pc.A{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.A{}), fD_ii(Pc.A{}), fG_ii(Pc.A{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.A{}), fD_V(Pc.A{}), fG_V(Pc.A{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.A{}, fD_I(Pc.A{}), fG_I(Pc.A{})), {==}})
+    case Pc.Bb{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Bb{}), fD_ii(Pc.Bb{}), fG_ii(Pc.Bb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Bb{}), fD_V(Pc.Bb{}), fG_V(Pc.Bb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Bb{}, fD_I(Pc.Bb{}), fG_I(Pc.Bb{})), {==}})
+    case Pc.B{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.B{}), fD_ii(Pc.B{}), fG_ii(Pc.B{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.B{}), fD_V(Pc.B{}), fG_V(Pc.B{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.B{}, fD_I(Pc.B{}), fG_I(Pc.B{})), {==}})
+
+# iiø7 - V7 - im7, root added on the nearer bass string.
+def ii_v_i_minor_shells3(tonic: Pc.Note) -> Vc.Voicing & Vc.Voicing & Vc.Voicing:
+  match tonic:
+    case Pc.C{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.C{}), fD_ii(Pc.C{}), fG_ii(Pc.C{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.C{}), fD_V(Pc.C{}), fG_V(Pc.C{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.C{}, fD_i_min(Pc.C{}), fG_i_min(Pc.C{})), {==}})
+    case Pc.Db{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Db{}), fD_ii(Pc.Db{}), fG_ii(Pc.Db{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Db{}), fD_V(Pc.Db{}), fG_V(Pc.Db{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Db{}, fD_i_min(Pc.Db{}), fG_i_min(Pc.Db{})), {==}})
+    case Pc.D{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.D{}), fD_ii(Pc.D{}), fG_ii(Pc.D{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.D{}), fD_V(Pc.D{}), fG_V(Pc.D{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.D{}, fD_i_min(Pc.D{}), fG_i_min(Pc.D{})), {==}})
+    case Pc.Eb{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Eb{}), fD_ii(Pc.Eb{}), fG_ii(Pc.Eb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Eb{}), fD_V(Pc.Eb{}), fG_V(Pc.Eb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Eb{}, fD_i_min(Pc.Eb{}), fG_i_min(Pc.Eb{})), {==}})
+    case Pc.E{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.E{}), fD_ii(Pc.E{}), fG_ii(Pc.E{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.E{}), fD_V(Pc.E{}), fG_V(Pc.E{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.E{}, fD_i_min(Pc.E{}), fG_i_min(Pc.E{})), {==}})
+    case Pc.F{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.F{}), fD_ii(Pc.F{}), fG_ii(Pc.F{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.F{}), fD_V(Pc.F{}), fG_V(Pc.F{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.F{}, fD_i_min(Pc.F{}), fG_i_min(Pc.F{})), {==}})
+    case Pc.Gb{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Gb{}), fD_ii(Pc.Gb{}), fG_ii(Pc.Gb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Gb{}), fD_V(Pc.Gb{}), fG_V(Pc.Gb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Gb{}, fD_i_min(Pc.Gb{}), fG_i_min(Pc.Gb{})), {==}})
+    case Pc.G{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.G{}), fD_ii(Pc.G{}), fG_ii(Pc.G{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.G{}), fD_V(Pc.G{}), fG_V(Pc.G{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.G{}, fD_i_min(Pc.G{}), fG_i_min(Pc.G{})), {==}})
+    case Pc.Ab{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Ab{}), fD_ii(Pc.Ab{}), fG_ii(Pc.Ab{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Ab{}), fD_V(Pc.Ab{}), fG_V(Pc.Ab{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Ab{}, fD_i_min(Pc.Ab{}), fG_i_min(Pc.Ab{})), {==}})
+    case Pc.A{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.A{}), fD_ii(Pc.A{}), fG_ii(Pc.A{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.A{}), fD_V(Pc.A{}), fG_V(Pc.A{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.A{}, fD_i_min(Pc.A{}), fG_i_min(Pc.A{})), {==}})
+    case Pc.Bb{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.Bb{}), fD_ii(Pc.Bb{}), fG_ii(Pc.Bb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.Bb{}), fD_V(Pc.Bb{}), fG_V(Pc.Bb{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.Bb{}, fD_i_min(Pc.Bb{}), fG_i_min(Pc.Bb{})), {==}})
+    case Pc.B{}:
+      (Vc.Voicing{shell3_strings(Pc.transpose(2n, Pc.B{}), fD_ii(Pc.B{}), fG_ii(Pc.B{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.transpose(7n, Pc.B{}), fD_V(Pc.B{}), fG_V(Pc.B{})), {==}},
+       Vc.Voicing{shell3_strings(Pc.B{}, fD_i_min(Pc.B{}), fG_i_min(Pc.B{})), {==}})
 
 # The two ii-V-i progressions, as chords
 # --------------------------------------

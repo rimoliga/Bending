@@ -394,6 +394,61 @@ reason Extension 2's three-note shapes (which include the 5th) exist.
   as `tritone_sub_guide_tones`, since the V7's 7th is 7 + 10 = 17 half
   steps up and `transpose_add12` brings that back to 5.
 
+### Extension 2 — Three-note shell voicings: done, all laws proved
+
+`src/exercise.bend`, `main.bend`.
+
+**Model.** The two-note shells leave the root to the bass player; the
+three-note version puts it back, on **whichever of the two bass strings lands
+closer to the 3rd's fret** (`root_pick`, a `Bool` dispatch, so — like every
+other computed scrutinee in this project — it gets its own function, with
+both candidate `Strings` built before the choice). That rule is not a
+heuristic bolted on to make the proofs pass; it is what guitarists actually
+do, and the shapes it produces are the textbook ones: in F, `ii Gm7  A10 D8
+G10`, `V C7  E8 D8 G9`, `I Fmaj7  A8 D7 G9`. Fixing the root to the A string
+instead fails the playability check outright for the V chord in 10 of 12
+keys (its root sits a 5th up the A string while its guide tones have been
+chased *down* toward the ii chord's — a 6-to-7-fret stretch); the compiler
+said so, per key, before any of this was written up.
+
+`shell3_strings(root, fD, fG)` takes the D- and G-string frets as given, so
+the same code serves both the standalone per-quality shapes (`min7_shell3`,
+`dom7_shell3`, `maj7_shell3`, `min7b5_shell3` — each proved playable for all
+12 roots by the established 12-way-match-then-`{==}`, 48 checks in total) and
+the voice-led progression (`ii_v_i_shells3`), where the frets are the chased
+ones. `ii_v_i_minor_shells` and `ii_v_i_minor_shells3` are the minor cadence
+iiø7 - V7 - im7 from Extension 1, in two and three notes; they reuse the
+major cadence's ii and V frets outright, since `min7b5` and `min7` share both
+guide tones, and only the tonic chord changes shape.
+
+`main.bend` takes the shape and the mode as flags, in any order:
+
+```
+$ bend main.bend F 3          $ bend main.bend F minor 3
+key F                         key F minor
+ii Gm7  A10:R D8:3 G10:7      ii Gm7b5  A10:R D8:3 G10:7
+V  C7  E8:R D8:7 G9:3         V  C7  E8:R D8:7 G9:3
+I  Fmaj7  A8:R D7:3 G9:7      i  Fm7  A8:R D6:3 G8:7
+```
+
+Each line is the chord, then one `<string><fret>:<role>` token per *sounding*
+string, low to high — muted strings print nothing, so a two-note shell prints
+two tokens and a three-note shell three, and the default output is
+byte-identical to what it was before this extension.
+
+**Laws proved** (`LAWS.bend`, proof in `PROOF.bend`):
+
+- `min7_shell3_sounds_root_3_7`: for every root, the three-note min7 shell
+  sounds the root, the minor 3rd and the minor 7th, each exactly once.
+  This is the part the `Voicing` type does *not* cover: that type
+  guarantees a shape is playable, but says nothing about which pitch
+  classes come out of it, and this shape juggles octaves (`nearest_fret`)
+  and picks between two bass strings — exactly the kind of arithmetic that
+  can quietly land on the wrong note. Checked by computation in all 12
+  branches; changing the `3n` in the statement to `5n` makes `bend
+  PROOF.bend` fail with `expected: 0n, observed: 1n`, so it is a real
+  check and not a tautology.
+
 ## Known compiler friction (not a Bend issue report yet)
 
 - Recursive proof `def`s must list the argument that structurally shrinks
