@@ -6,8 +6,8 @@ states its laws in `LAWS.bend` and proves them in `PROOF.bend`; `bend
 PROOF.bend` is the gate, and it must print `All terms check.` before a
 milestone is considered done.
 
-All five milestones are implemented, and **every law stated is proved**
-(`bend PROOF.bend` → `All terms check.`). Two gaps the README once documented
+All five milestones and three later extensions are implemented, and **all 14
+laws stated are proved** (`bend PROOF.bend` → `All terms check.`). Two gaps the README once documented
 rather than papered over have since been closed and are written up where they
 happened: Milestone 4's divide-and-conquer wrapper (`solve_parallel`) shipped
 with its own boundedness unproved and was closed with two more lemmas, and
@@ -37,6 +37,10 @@ python3 tools/fretboard.py --shape 3   # printable practice sheet (no deps)
 ```
 
 ## Status by milestone
+
+(Then three extensions past the original five: more chord qualities, richer
+voicings, and a renderer outside Bend. Same rule throughout — a feature that
+deserves a law gets one, or the README says why it didn't.)
 
 ### Milestone 1 — Pitch classes: done, all laws proved
 
@@ -358,7 +362,8 @@ outside it.
   `{==}` checks, mechanically generated rather than hand-written.
 
 Run `bend PROOF.bend` from the repo root: **all 11 laws across all five
-milestones** check, printing `All terms check.`
+milestones** check, printing `All terms check.` The three extensions below
+add three more, for **14 in total**.
 
 ### Extension 1 — Half-diminished and diminished 7ths: done, all laws proved
 
