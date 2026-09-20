@@ -57,3 +57,34 @@ law negative_harmony_involution:
   for tonic: Pc.Note
   for n: Pc.Note
   {Nh.negative_harmony(tonic, Nh.negative_harmony(tonic, n)) == n : Pc.Note}
+
+# Milestone 3: guitar voicings
+# ============================
+# Voicing (src/voicing.bend) is a dependent pair of guitar string
+# positions and a proof they are playable (fret_bounds_ok,
+# finger_count_ok and stretch_ok all hold): an unplayable Voicing
+# cannot be constructed, so there is no separate law to state for
+# that part -- it is the type itself. What remains is the one
+# explicit law the milestone asks for: drop-2 and drop-3 reorder a
+# closed voicing's notes without changing which pitch classes, or how
+# many of each, are present.
+
+# LAW: for every 4-note closed voicing, drop-2 produces the same
+# pitch classes, the same number of times each, as the original --
+# i.e. a permutation of the same set.
+law drop2_is_permutation:
+  for +n0: Pc.Note
+  for +n1: Pc.Note
+  for +n2: Pc.Note
+  for +n3: Pc.Note
+  for +x: Pc.Note
+  {Ch.count(x, Ch.drop2([n0, n1, n2, n3])) == Ch.count(x, [n0, n1, n2, n3]) : Nat}
+
+# LAW: same, for drop-3.
+law drop3_is_permutation:
+  for +n0: Pc.Note
+  for +n1: Pc.Note
+  for +n2: Pc.Note
+  for +n3: Pc.Note
+  for +x: Pc.Note
+  {Ch.count(x, Ch.drop3([n0, n1, n2, n3])) == Ch.count(x, [n0, n1, n2, n3]) : Nat}

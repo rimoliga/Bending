@@ -20,6 +20,7 @@ bend PROOF.bend          # the gate: must print "All terms check."
 bend src/note.bend --check-only
 bend src/chord.bend --check-only
 bend src/negharm.bend --check-only
+bend src/voicing.bend --check-only
 ```
 
 ## Status by milestone
@@ -120,10 +121,57 @@ a known note) erases, leaving `mirror(mirror(n)) == n`.
 Run `bend PROOF.bend` from the repo root to check all six laws (three from
 Milestone 1, three from Milestone 2).
 
-### Milestones 3-5
+### Milestone 3 — Playable-by-construction guitar voicings: done, all laws proved
 
-Not started yet: guitar voicings (3), voice leading (4), the
-exercise-generator CLI (5).
+`src/voicing.bend` (fretboard model), `src/chord.bend` (drop-2/drop-3).
+
+**Model.** Six strings, standard tuning low to high (E, A, D, G, B, E),
+frets 0-15. A `Position` is `Muted{}` or `Fret{f}` (`f = 0` is an open
+string). `Strings` is a plain 6-field record, one `Position` per string —
+no array, since a guitar has a genuinely fixed 6 strings, not an arbitrary
+`N`. `playable(strings)` computes, as a `Bool`, the three rules: every fret
+`<= 15`; at most 4 strings are actually *pressed* (open and muted strings
+need no finger, so `Fret{0}` and `Muted{}` don't count, simplifying away
+barre chords, where one finger covers several strings at once); and the
+highest and lowest *pressed* fret are at most 4 apart. `Voicing` pairs a
+`Strings` with a proof that `playable(strings)` equals `True` — since that
+proof's type is an equality between two concrete `Bool` computations, and
+`Bool`'s two constructors are distinct, the type is uninhabited whenever
+the strings genuinely aren't playable. Tried building one by hand with a
+5-fret stretch (`x16000`) to confirm: `bend` rejects it at the `{==}` with
+`expected: False{}`, `observed: True{}` — pointing at exactly the fret that
+broke it. **No separate law is needed for "an unplayable Voicing cannot be
+built" — the type is the proof.**
+
+Drop-2 and drop-3 are defined over an ordered `List<Pc.Note>` (a chord's
+notes stacked close, e.g. `[root, 3rd, 5th, 7th]`), not over a `Voicing`
+directly: assigning an abstract note list onto specific strings and frets
+is a search problem (which fret plays which note, given the tuning), left
+for Milestones 4-5's voice-leading search. For a list of exactly 4 notes,
+drop-2 moves the note at index 2 (2nd from the top) to the front and
+drop-3 moves index 1 (3rd from the top) to the front — since a `Note` only
+tracks pitch class, "drop an octave" is invisible here and both are just a
+reordering. (Any other list length passes through unchanged: a total, if
+musically unused, fallback.)
+
+**Laws proved** (`LAWS.bend`, proofs in `PROOF.bend`):
+
+- `drop2_is_permutation`, `drop3_is_permutation`: for every 4-note closed
+  voicing, drop-2 (respectively drop-3) produces the same pitch classes,
+  the same number of times each, as the original — formalized the same
+  way `demos/proof_insertion_sort` formalizes "is a permutation of": equal
+  `count(x, _)` for every pitch class `x`. Both follow from one lemma,
+  `count_swap_adjacent` (swapping a list's first two elements doesn't
+  change any element's count, via `bump_swap`, ported from that same
+  demo), applied once (drop-3, a single adjacent swap) or twice (drop-2,
+  two adjacent swaps compose to move the note two places).
+
+Run `bend PROOF.bend` from the repo root to check all eight laws (three
+from Milestone 1, three from Milestone 2, two from Milestone 3).
+
+### Milestones 4-5
+
+Not started yet: voice leading (4), the exercise-generator CLI (5).
 
 ## Known compiler friction (not a Bend issue report yet)
 

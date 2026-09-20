@@ -304,6 +304,53 @@ def neg_involution_core(+idx: Nat, +comp: Nat,
     Pc.transpose(idx, Nh.mirror(Pc.transpose(comp, Pc.transpose(idx, Nh.mirror(Pc.transpose(comp, n)))))),
     Pc.transpose(idx, Pc.transpose(comp, n)), n, sE, sF)
 
+# Milestone 3: guitar voicings
+# =============================
+# The playability part of this milestone needs no proof here: Voicing
+# (src/voicing.bend) pairs Strings with a proof that `playable`
+# computes to True, and since that's an equality between two concrete
+# Bool computations, the type itself is uninhabited for unplayable
+# strings -- there is nothing left for PROOF.bend to establish. What
+# remains is drop-2/drop-3 preserving the pitch-class multiset.
+
+def bump_swap(a: Bool, b: Bool, -n: Nat) -> {Ch.bump(a, Ch.bump(b, n)) == Ch.bump(b, Ch.bump(a, n)) : Nat}:
+  match a b:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} True{}:
+      {==}
+    case False{} False{}:
+      {==}
+
+# swapping the first two elements of a list doesn't change how many
+# times x occurs in it
+def count_swap_adjacent(+x: Pc.Note, a: Pc.Note, b: Pc.Note, t: List<Pc.Note>) ->
+  {Ch.count(x, a <> b <> t) == Ch.count(x, b <> a <> t) : Nat}:
+  bump_swap(Pc.is_eq(x, a), Pc.is_eq(x, b), Ch.count(x, t))
+
+# drop2([n0,n1,n2,n3]) == [n2,n0,n1,n3]: two adjacent swaps move n2 to
+# the front (n1<->n2, then n0<->n2), each preserving count.
+def Laws.drop2_is_permutation(n0, n1, n2, n3, x):
+  s1 = count_swap_adjacent(x, n1, n2, n3 <> Nil{})
+  # s1 : {count(x, n1<>n2<>n3<>Nil{}) == count(x, n2<>n1<>n3<>Nil{}) : Nat}
+  step1 = Equal.cong(Nat, Nat, z => Ch.bump(Pc.is_eq(x, n0), z),
+    Ch.count(x, n1 <> n2 <> n3 <> Nil{}), Ch.count(x, n2 <> n1 <> n3 <> Nil{}), s1)
+  # step1 : {count(x, n0<>n1<>n2<>n3<>Nil{}) == count(x, n0<>n2<>n1<>n3<>Nil{}) : Nat}
+  step2 = count_swap_adjacent(x, n0, n2, n1 <> n3 <> Nil{})
+  # step2 : {count(x, n0<>n2<>n1<>n3<>Nil{}) == count(x, n2<>n0<>n1<>n3<>Nil{}) : Nat}
+  combined = Equal.trans(Nat, Ch.count(x, n0 <> n1 <> n2 <> n3 <> Nil{}),
+    Ch.count(x, n0 <> n2 <> n1 <> n3 <> Nil{}), Ch.count(x, n2 <> n0 <> n1 <> n3 <> Nil{}), step1, step2)
+  # combined : {count(x, n0<>n1<>n2<>n3<>Nil{}) == count(x, n2<>n0<>n1<>n3<>Nil{}) : Nat}
+  Equal.sym(Nat, Ch.count(x, n0 <> n1 <> n2 <> n3 <> Nil{}), Ch.count(x, n2 <> n0 <> n1 <> n3 <> Nil{}), combined)
+
+# drop3([n0,n1,n2,n3]) == [n1,n0,n2,n3]: one adjacent swap (n0<->n1).
+def Laws.drop3_is_permutation(n0, n1, n2, n3, x):
+  step = count_swap_adjacent(x, n0, n1, n2 <> n3 <> Nil{})
+  # step : {count(x, n0<>n1<>n2<>n3<>Nil{}) == count(x, n1<>n0<>n2<>n3<>Nil{}) : Nat}
+  Equal.sym(Nat, Ch.count(x, n0 <> n1 <> n2 <> n3 <> Nil{}), Ch.count(x, n1 <> n0 <> n2 <> n3 <> Nil{}), step)
+
 def Laws.negative_harmony_involution(tonic, n):
   match tonic:
     case Pc.C{}:

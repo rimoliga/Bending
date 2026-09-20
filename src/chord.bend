@@ -111,3 +111,75 @@ def chord_len(c: Chord) -> Nat:
   match c:
     case Chord{root, intervals}:
       len(intervals)
+
+# Drop-2 and drop-3 voicings
+# --------------------------
+# A closed voicing is its notes stacked as close together as
+# possible, e.g. [root, 3rd, 5th, 7th]. Drop-2 takes the 2nd note from
+# the top and drops it an octave; drop-3 takes the 3rd note from the
+# top. Since a Note only tracks pitch class, "an octave down" is
+# invisible -- both are just a reordering of the same 4 notes: drop-2
+# moves index 2 to the front, drop-3 moves index 1 to the front. Any
+# list that isn't exactly 4 notes long passes through unchanged (a
+# total, if not musically meaningful, fallback).
+
+def drop2(xs: List<Pc.Note>) -> List<Pc.Note>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case n0 <> t1:
+      match t1:
+        case Nil{}:
+          n0 <> Nil{}
+        case n1 <> t2:
+          match t2:
+            case Nil{}:
+              n0 <> n1 <> Nil{}
+            case n2 <> t3:
+              match t3:
+                case Nil{}:
+                  n0 <> n1 <> n2 <> Nil{}
+                case n3 <> t4:
+                  match t4:
+                    case Nil{}:
+                      n2 <> n0 <> n1 <> n3 <> Nil{}
+                    case n4 <> t5:
+                      n0 <> n1 <> n2 <> n3 <> n4 <> t5
+
+def drop3(xs: List<Pc.Note>) -> List<Pc.Note>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case n0 <> t1:
+      match t1:
+        case Nil{}:
+          n0 <> Nil{}
+        case n1 <> t2:
+          match t2:
+            case Nil{}:
+              n0 <> n1 <> Nil{}
+            case n2 <> t3:
+              match t3:
+                case Nil{}:
+                  n0 <> n1 <> n2 <> Nil{}
+                case n3 <> t4:
+                  match t4:
+                    case Nil{}:
+                      n1 <> n0 <> n2 <> n3 <> Nil{}
+                    case n4 <> t5:
+                      n0 <> n1 <> n2 <> n3 <> n4 <> t5
+
+def bump(b: Bool, n: Nat) -> Nat:
+  match b:
+    case True{}:
+      1n+n
+    case False{}:
+      n
+
+# how many times x occurs in xs, as pitch classes
+def count(+x: Pc.Note, xs: List<Pc.Note>) -> Nat:
+  match xs:
+    case Nil{}:
+      0n
+    case h <> t:
+      bump(Pc.is_eq(x, h), count(x, t))
