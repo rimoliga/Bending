@@ -61,42 +61,99 @@ def harden(xs: List<Pc.Note>) -> +List<Pc.Note>:
     case h <> t:
       h <> harden(t)
 
-def candidates_go(remaining: Nat, +c: Ch.Chord, +offset: Nat) -> List<+List<Pc.Note>>:
+def candidates_go(remaining: Nat, +c: Ch.Chord, +offset: Nat) -> List<&2, +List<Pc.Note>>:
   match remaining:
     case 0n:
       Nil{}
     case 1n+r:
       harden(Ch.notes(Ch.invert_times(c, offset))) <> candidates_go(r, c, 1n+offset)
 
-def candidates(+c: Ch.Chord) -> List<+List<Pc.Note>>:
+# every inversion of c, candidate 0 being its closed/root position
+def candidates(+c: Ch.Chord) -> List<&2, +List<Pc.Note>>:
   candidates_go(Ch.chord_len(c), c, 0n)
+
+# search: the first candidate within n semitones of anchor
+# -------------------------------------------------------
+# `search` is the piece that makes solve_chain a real search instead
+# of a fixed choice, and it is deliberately a *separate, single-
+# recursive* function returning Maybe: it decides one chord's voicing
+# from the anchor alone, without ever needing to know what happens to
+# the rest of the progression. That is what dissolves the mutual
+# recursion that blocked the earlier attempt (see the note on
+# solve_chain below).
+#
+# search_pick exists because Bend cannot match a computed value:
+# `voices_bounded(anchor, h, n)` has to become a parameter of its own
+# function to be matched on. Both of its branches' values are computed
+# eagerly at the call site (the same shape as note.bend's read_step).
+
+def search_pick(b: Bool, v: +List<Pc.Note>, rest: Maybe<&2, +List<Pc.Note>>) -> Maybe<&2, +List<Pc.Note>>:
+  match b:
+    case True{}:
+      Some{v}
+    case False{}:
+      rest
+
+def search(cs: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>, +n: Nat) -> Maybe<&2, +List<Pc.Note>>:
+  match cs:
+    case Nil{}:
+      None{}
+    case +h <> t:
+      search_pick(voices_bounded(anchor, h, n), h, search(t, anchor, n))
+
+# the searched voicing, or `d` when the search found nothing (in which
+# case solve_chain fails anyway, so the value is never used -- it only
+# has to exist so the recursive call can be made before the Maybe is
+# inspected).
+def from_maybe_v(m: Maybe<&2, +List<Pc.Note>>, +d: +List<Pc.Note>) -> +List<Pc.Note>:
+  match m:
+    case None{}:
+      d
+    case Some{v}:
+      v
 
 # solve_chain
 # -----------
-# Each chord contributes exactly one voicing: its closed/root-position
-# candidate (candidates(c)'s own index 0). Searching *among* a chord's
-# several inversions for the best one, and continuing the chain from
-# whichever works, needs two phases (try a candidate; on success,
-# process the rest of the chords) that each call back into the other
-# -- genuine mutual recursion, which Bend disallows (a function must
-# be defined before its first use, with no cycle). An early attempt at
-# that search is why `candidates` above exists; it was descoped here
-# in favor of a single, single-recursive function whose boundedness
-# law (LAWS.bend, proved in PROOF.bend) is a plain induction on the
-# chord list -- a proof beats a feature. Extending this to a genuine
-# multi-candidate search, proved, is future work.
+# Each chord contributes one voicing, chosen by `search` among *all*
+# its inversions: the first one within n semitones of the previous
+# chosen voicing. It fails (None) at the first chord where no
+# inversion is close enough.
+#
+# The shape here is what makes that expressible. An earlier attempt
+# wrote the search and the progression walk as two phases calling into
+# each other -- try a candidate, and *on success continue with the
+# rest of the chords*, on failure try the next candidate -- which is
+# genuine mutual recursion, and Bend requires every function to be
+# defined before its first use, with no cycles. The way out is not a
+# trick but a change of algorithm shape: because the acceptance test
+# for a candidate depends only on the anchor, never on the rest of the
+# progression, the search can be a self-contained function returning
+# `Maybe<voicing>` (`search`, above) and the walk can consume its
+# result. The one remaining obstacle -- the walk's recursive call
+# needs the chosen voicing, which is inside that Maybe, and Bend
+# cannot match a computed value inline -- is handled by projecting the
+# Maybe to a plain voicing with `from_maybe_v` *before* recursing, and
+# only then dispatching on the Maybe in solve_chain_step. The
+# projection's default is never observed: when the search returned
+# None, solve_chain_step discards the recursive result and returns
+# None.
+#
+# Backtracking (undoing chord k's choice because chord k+3 later got
+# stuck) is still out of scope, and is genuinely the mutually
+# recursive algorithm; this is a greedy search, and the law below is
+# about what it does choose.
 
-def solve_chain_pick(b: Bool, on_true: Maybe<&2, List<&2, +List<Pc.Note>>>, v: +List<Pc.Note>) ->
+def solve_chain_step(chosen: Maybe<&2, +List<Pc.Note>>, rest_sol: Maybe<&2, List<&2, +List<Pc.Note>>>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:
-  match b on_true:
-    case True{} None{}:
+  match chosen rest_sol:
+    case None{} None{}:
       None{}
-    case True{} Some{vs}:
+    case None{} Some{vs}:
+      None{}
+    case Some{v} None{}:
+      None{}
+    case Some{v} Some{vs}:
       Some{v <> vs}
-    case False{} None{}:
-      None{}
-    case False{} Some{vs}:
-      None{}
 
 def solve_chain(chords: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:
@@ -104,8 +161,8 @@ def solve_chain(chords: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
     case Nil{}:
       Some{Nil{}}
     case c <> rest:
-      +v = harden(Ch.notes(c))
-      solve_chain_pick(voices_bounded(anchor, v, n), solve_chain(rest, n, v), v)
+      +chosen = search(candidates(c), anchor, n)
+      solve_chain_step(chosen, solve_chain(rest, n, from_maybe_v(chosen, Nil{})))
 
 # every consecutive pair, starting from anchor, is within n semitones
 def chain_bounded(sol: List<&2, +List<Pc.Note>>, anchor: +List<Pc.Note>, +n: Nat) -> Bool:
@@ -187,8 +244,30 @@ def append_sol(xs: List<&2, +List<Pc.Note>>, ys: List<&2, +List<Pc.Note>>) -> Li
     case h <> t:
       h <> append_sol(t, ys)
 
-def join_sol(l: Maybe<&2, List<&2, +List<Pc.Note>>>, r: Maybe<&2, List<&2, +List<Pc.Note>>>) ->
+# the right half was searched from a *guessed* anchor (the closed
+# voicing of the left half's last chord), because the left half's real
+# answer isn't known until it finishes -- that guess is what keeps the
+# two halves independent. Now that both are in hand, the seam where
+# they meet is checked for real: the right half's first voicing must
+# be within n of the left half's actual last voicing. seam_ok is
+# vacuously true for an empty right half.
+def seam_ok(ys: List<&2, +List<Pc.Note>>, +b: +List<Pc.Note>, +n: Nat) -> Bool:
+  match ys:
+    case Nil{}:
+      True{}
+    case h <> t:
+      voices_bounded(b, h, n)
+
+def join_pick(ok: Bool, ls: List<&2, +List<Pc.Note>>, rs: List<&2, +List<Pc.Note>>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:
+  match ok:
+    case True{}:
+      Some{append_sol(ls, rs)}
+    case False{}:
+      None{}
+
+def join_sol(l: Maybe<&2, List<&2, +List<Pc.Note>>>, r: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  +anchor: +List<Pc.Note>, +n: Nat) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
   match l r:
     case None{} None{}:
       None{}
@@ -196,8 +275,8 @@ def join_sol(l: Maybe<&2, List<&2, +List<Pc.Note>>>, r: Maybe<&2, List<&2, +List
       None{}
     case Some{ls} None{}:
       None{}
-    case Some{ls} Some{rs}:
-      Some{append_sol(ls, rs)}
+    case Some{+ls} Some{+rs}:
+      join_pick(seam_ok(rs, last_of(ls, anchor), n), ls, rs)
 
 def solve_parallel_split(pair: +List<Ch.Chord> & +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:
@@ -205,7 +284,7 @@ def solve_parallel_split(pair: +List<Ch.Chord> & +List<Ch.Chord>, +n: Nat, +anch
     case (+left, right):
       +mid_anchor = pick_anchor(last_chord(left), anchor)
       left_res right_res = solve_chain(left, n, anchor) solve_chain(right, n, mid_anchor)
-      join_sol(left_res, right_res)
+      join_sol(left_res, right_res, anchor, n)
 
 def solve_parallel(+chords: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:

@@ -6,11 +6,13 @@ states its laws in `LAWS.bend` and proves them in `PROOF.bend`; `bend
 PROOF.bend` is the gate, and it must print `All terms check.` before a
 milestone is considered done.
 
-All five milestones are implemented, and **all 11 laws stated are proved**
-(`bend PROOF.bend` → `All terms check.`). Milestone 4's divide-and-conquer
-wrapper (`solve_parallel`) was initially shipped with its own boundedness
-unproved — a real, documented gap, not smoothed over — and was later closed
-with two more lemmas; see Milestone 4 below for how.
+All five milestones are implemented, and **every law stated is proved**
+(`bend PROOF.bend` → `All terms check.`). Two gaps the README once documented
+rather than papered over have since been closed and are written up where they
+happened: Milestone 4's divide-and-conquer wrapper (`solve_parallel`) shipped
+with its own boundedness unproved and was closed with two more lemmas, and
+`solve_chain`'s voice-leading *search* over chord inversions — descoped once
+as blocked on mutual recursion — is now real, and proved.
 
 ## Toolchain
 
@@ -188,85 +190,99 @@ every corresponding pair of two same-length note lists is within `n`
 semitones; `chain_bounded(sol, anchor, n)` extends that down a whole list of
 voicings, starting from a given anchor.
 
-`solve_chain(chords, n, anchor)` walks a progression and, for each chord,
-uses its closed/root-position voicing, failing (`None`) the moment that
-voicing isn't within `n` of the previous one. **This was originally a
-genuine search** over a chord's several inversions (`candidates`,
-`Ch.invert_times`, still in the file), trying each until one was bounded,
-then continuing with the rest of the progression. That algorithm hit a hard
-Bend restriction: a function must be defined before its first use, and
-mutual recursion is disallowed outright — but "try a candidate, and on
-success continue processing the rest of the chords" is inherently two
-phases that each call back into the other. Merging them into one function
-(the guide's own suggested fix) using an eager-unconditional-both-branches
-technique (borrowed from `demos/proof_insertion_sort`'s `dec`/`insert`,
-which sidesteps a different instance of "can't match a computed value")
-worked and typechecked, but made the resulting function's own correctness
-proof (four mutually-recursive-shaped cases, each computing two candidate
-continuations eagerly) look substantially harder than the single-candidate
-version. Given "a law proved beats a feature," the search was descoped to
-one fixed candidate per chord — weaker, but its boundedness law is a plain
-structural induction on the chord list, fully proved below. Restoring a
-real multi-candidate search *with* a proof is future work; the language
-restriction that blocks the direct approach, and the merge technique that
-gets around it, are worth knowing about either way.
+`solve_chain(chords, n, anchor)` walks a progression and, at each chord,
+**searches among all of that chord's inversions** (`candidates`,
+`Ch.invert_times`) for the first voicing within `n` semitones of the
+previously chosen one, failing (`None`) at the first chord where no inversion
+is close enough. The search is real: with a bound of 2 semitones, `C7 → F7`
+is rejected in root position (every voice moves 5) and accepted as `[C, Eb,
+F, A]`, F7's second inversion (voices move 0, 1, 2, 1) — a progression the
+earlier, fixed-voicing version simply reported as unsolvable.
 
-`solve_parallel(chords, n, anchor)` is the divide-and-conquer version the
-milestone asks for: split the progression in half, and run `solve_chain` on
-each half via a parallel call (`left_res right_res = solve_chain(...)
-solve_chain(...)`; call it as `solve_parallel!(...)` to run the split on
-the GPU). Because `solve_chain` no longer searches, a chord's chosen
-voicing never depends on the anchor it's approached from (only whether it's
-*accepted* does) — so the right half's anchor (the closed voicing of the
-left half's last chord) is computable directly from the chord list, with
-no need to wait for the left half's own result. That is what makes the two
-halves genuinely independent rather than one waiting on the other.
-Implemented and manually verified (a 4-chord progression run through it
-matches running it through `solve_chain` directly), and its own
-boundedness — `solve_parallel_bounded` below — is proved too, on top of
-`solve_chain_bounded`, needing two more pieces:
+*This is the point that was previously descoped*, and the way back in was a
+change of algorithm shape rather than a workaround. The blocked version wrote
+the search and the progression walk as two phases calling into each other —
+try a candidate, and *on success continue with the rest of the chords*, on
+failure try the next candidate — which is genuine mutual recursion, and Bend
+requires every function to be defined before its first use, with no cycles
+(`bend guide`'s own advice, merging the two phases into one function with
+eager both-branch evaluation, had been tried and made the resulting proof
+worse, not better). The observation that dissolves it: **a candidate's
+acceptance test depends only on the anchor, never on the rest of the
+progression.** So the search can be a self-contained, singly recursive
+function returning `Maybe<voicing>` (`search`, `search_pick`), and the walk
+consumes its result. The one remaining obstacle — the walk's recursive call
+needs the chosen voicing, which sits inside that `Maybe`, and Bend cannot
+match a computed value inline — is handled by *projecting* the `Maybe` to a
+plain voicing (`from_maybe_v`, with an unused default) **before** recursing,
+and only then dispatching on the `Maybe` itself in `solve_chain_step`. The
+projection's default is never observed: when the search returned `None`,
+`solve_chain_step` discards the recursive result and returns `None` anyway.
+Backtracking (undoing chord *k*'s choice because chord *k+3* later got stuck)
+is still the genuinely mutually recursive algorithm and is still out of
+scope; this is a greedy search, and the law is about what it does choose.
 
-- **`chain_bounded` composes across a list append**: if `xs`'s own chain
-  (from a given anchor) is bounded, and `ys`'s chain (from `xs`'s *last*
-  voicing, `last_of(xs, anchor)` — or the given anchor itself if `xs` is
-  empty) is bounded, so is the chain of `append_sol(xs, ys)` from that same
-  anchor (`chain_bounded_append`, by induction on `xs`; needed two small
-  `Bool` lemmas, `Bool.and(a, b) == True` implies `a == True` and `b ==
-  True`, proved by the same discrimination-by-motive technique `Maybe`'s
-  lemmas used, plus `last_of(v <> vs, anchor) == last_of(vs, v)`, true
-  by `last_of`'s own definition rather than needing induction).
-- **`solve_chain`'s output always ends on the closed voicing of the
-  progression's last chord, independent of the anchor** (`solve_chain_last`)
-  — the fact that actually justifies running the two halves in parallel in
-  the first place, now proved rather than just asserted. Its own proof
-  needed `last_chord_total`/`last_chord_some` (recasting `last_chord`'s
-  `Maybe` into a plain value plus a connecting equality, since a
-  non-empty chord list always *has* a last chord — reasoning about "is it
-  `Some`" is otherwise awkward to carry through an induction) and a lemma
-  that `pick_anchor(last_chord(rest), harden(Ch.notes(c)))` doesn't depend
-  on that fallback argument at all once `rest`'s shape is known.
+The proof follows the same skeleton as before, plus one new lemma about the
+search itself: `search_sound` — whenever `search` returns a candidate, that
+candidate really is within `n` of the anchor (induction on the candidate
+list, with `search_pick_sound` mirroring `search_pick`'s `Bool` dispatch) —
+and `from_maybe_some`, that projecting `Some{w}` gives back `w`. Those two
+are exactly what `solve_chain_step_bounded` needs where the old proof could
+appeal to the voicing being fixed.
 
-Both proofs reuse the exact shape of `solve_chain_bounded`'s own proof (a
-`solve_chain_pick`-style dispatcher taking the search's `Bool`/`Maybe` as
-plain parameters, with the induction hypothesis threaded in as a small
-function argument) — once written for one property, adapting it for a
-second was mostly mechanical, not a new technique.
+`solve_parallel(chords, n, anchor)` is the divide-and-conquer version: split
+the progression in half and run `solve_chain` on each half via a parallel
+call (`left_res right_res = solve_chain(...) solve_chain(...)`; call it as
+`solve_parallel!(...)` to run the split on the GPU). With a real search, the
+two halves are no longer independent for free — the right half's true anchor
+is whatever the left half's search chose for its last chord, which isn't
+known until the left half finishes. **So `solve_parallel` is now speculative:
+the right half is searched from a *guessed* anchor (the closed voicing of the
+left half's last chord, `pick_anchor`), and once both halves are in hand the
+seam between them is checked for real** (`seam_ok`: the right half's first
+voicing must be within `n` of the left half's *actual* last voicing);
+`join_sol` returns `None` if it isn't. That keeps the law true — the
+guarantee is about every chain `solve_parallel` does return — at the price of
+completeness: when the speculation misses, `solve_parallel` reports failure
+on a progression `solve_chain` would have solved (verified: at `n = 6` and
+`n = 5` the two agree on `C7 F7 Bb7 Eb7`; at `n = 2`, `solve_chain` finds the
+inversion chain above and `solve_parallel` returns `None`). The honest
+alternative — on a failed seam, recompute the right half from the real anchor
+— was not taken because that fallback is an *argument* to the dispatching
+function, so it would be computed on every run, including the ones where the
+speculation was right, which is exactly the sequential work the split was
+meant to avoid.
+
+The `solve_parallel` proof keeps `chain_bounded_append` (unchanged) and
+replaces `solve_chain_last` — the old "the output always ends on the closed
+voicing of the last chord" lemma, which the search makes false, and which is
+deleted rather than weakened — with `chain_bounded_reanchor`: a chain bounded
+from one anchor is bounded from a different anchor as soon as the single step
+from that anchor into the chain's first voicing is within bound, since
+nothing after that first step mentions the anchor at all. That is precisely
+what the seam check establishes, so the right half's bound (proved against
+the guess) transfers onto the left half's real last voicing, and
+`chain_bounded_append` glues the two halves.
 
 **Laws proved** (`LAWS.bend`, proofs in `PROOF.bend`):
 
 - `solve_chain_bounded`: whenever `solve_chain` finds a solution, no voice
   in it ever moves more than `n` semitones between two consecutive chords
   (including the move from the given starting anchor into the first
-  chord). The proof needed generic `Maybe` lemmas (`Some` is injective,
-  `None ≠ Some`, both via the guide's constructor-discrimination-by-motive
-  technique) since matching a computed value is disallowed and the search
-  logic (`solve_chain_pick`) has to be its own function taking `Bool`/
-  `Maybe` as plain parameters — see `PROOF.bend`.
+  chord) — now over the output of the real inversion search, not of a
+  fixed choice. The proof needed generic `Maybe` lemmas (`Some` is
+  injective, `None ≠ Some`, both via the guide's
+  constructor-discrimination-by-motive technique) since matching a
+  computed value is disallowed and every dispatch (`search_pick`,
+  `solve_chain_step`) has to be its own function taking `Bool`/`Maybe` as
+  plain parameters, plus `search_sound` for the search itself — see
+  `PROOF.bend`.
 - `solve_parallel_bounded`: the same guarantee for `solve_parallel`'s
   output, built from `solve_chain_bounded` (applied to each half),
-  `solve_chain_last` (to show the two halves actually meet at the anchor
-  each expects) and `chain_bounded_append` (to glue their two bounded
-  chains into one).
+  `chain_bounded_reanchor` (to move the right half's bound from the
+  guessed anchor onto the left half's real last voicing, justified by the
+  seam check) and `chain_bounded_append` (to glue their two bounded chains
+  into one).
 
 ### Milestone 5 — Exercise generator CLI: done, all laws proved
 
@@ -382,8 +398,15 @@ milestones** check, printing `All terms check.`
   anywhere, not just for recursion), so genuine mutual recursion — even
   the indirect kind this project's proofs kept running into, where a
   boolean/`Maybe` dispatch helper (forced to exist by the rule above) needs
-  to call back into the function that called it — has no fix short of
-  merging the two into one function (`bend guide`'s own advice). None of
+  to call back into the function that called it — has no *local* fix short
+  of merging the two into one function (`bend guide`'s own advice). The
+  third way out, which is what eventually unblocked `solve_chain`'s
+  inversion search, is to notice that the cycle is often not essential:
+  if the callee's decision doesn't actually depend on what the caller does
+  next, it can return that decision as data (a `Maybe`) instead of calling
+  back, and the caller consumes it — with the value projected out of the
+  `Maybe` *before* the recursive call, since the call can't be made from
+  inside a `match` that the recursion has to happen underneath. None of
   this produced a bad error message once understood, but it took a few
   rounds with the compiler each time to see what was actually being asked.
 - Multi-scrutinee `match a b:` requires `a b` in the exact order the
