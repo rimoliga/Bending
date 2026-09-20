@@ -8,6 +8,7 @@ import Base
 import ./src/note.bend as Pc
 import ./src/chord.bend as Ch
 import ./src/negharm.bend as Nh
+import ./src/voicelead.bend as VL
 
 # Milestone 1: pitch classes
 # ==========================
@@ -88,3 +89,18 @@ law drop3_is_permutation:
   for +n3: Pc.Note
   for +x: Pc.Note
   {Ch.count(x, Ch.drop3([n0, n1, n2, n3])) == Ch.count(x, [n0, n1, n2, n3]) : Nat}
+
+# Milestone 4: voice leading
+# ==========================
+
+# LAW: whenever VL.solve_chain finds a solution for a progression, no
+# voice in that solution ever moves more than n semitones between two
+# consecutive chords (counting the move from the given starting
+# anchor into the first chord).
+law solve_chain_bounded:
+  for chords: +List<Ch.Chord>
+  for +n: Nat
+  for +anchor: +List<Pc.Note>
+  for sol: List<&2, +List<Pc.Note>>
+  for e: {VL.solve_chain(chords, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}
+  {VL.chain_bounded(sol, anchor, n) == True{} : Bool}

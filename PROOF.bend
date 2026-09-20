@@ -6,6 +6,7 @@ import Base
 import ./src/note.bend as Pc
 import ./src/chord.bend as Ch
 import ./src/negharm.bend as Nh
+import ./src/voicelead.bend as VL
 import ./LAWS.bend as Laws
 
 # Nat helpers
@@ -377,3 +378,84 @@ def Laws.negative_harmony_involution(tonic, n):
       neg_involution_core(10n, 2n, {==}, {==}, n)
     case Pc.B{}:
       neg_involution_core(11n, 1n, {==}, {==}, n)
+
+# Milestone 4: voice leading
+# ===========================
+
+# generic Maybe lemmas: None{} and Some{_} are distinct, and Some is
+# injective. Both by the guide's discrimination-via-motive technique.
+
+def maybe_disc(-A: Data, m: Maybe<&2, A>) -> Type:
+  match m:
+    case None{}:
+      Unit
+    case Some{v}:
+      Empty
+
+def none_ne_some(-A: Data, x: A, e: {None{} == Some{x} : Maybe<&2, A>}) -> Empty:
+  %e : maybe_disc(A, _)
+  Unit{}
+
+def some_prj(-A: Data, d: A, m: Maybe<&2, A>) -> A:
+  match m:
+    case None{}:
+      d
+    case Some{v}:
+      v
+
+def some_inj(-A: Data, a: A, b: A, e: {Some{a} == Some{b} : Maybe<&2, A>}) -> {a == b : A}:
+  %e : {a == some_prj(A, a, _) : A}
+  {==}
+
+# solve_chain_pick_bounded: whenever solve_chain_pick(b, on_true, v)
+# succeeds with `sol`, b was True and on_true was Some{vs} with sol ==
+# v <> vs (the None{} == Some{sol} cases are absurd); `ih` supplies
+# boundedness of vs against v, since on_true is always
+# solve_chain(rest, n, v) at the one call site below, and that's
+# exactly what the outer induction hypothesis proves. `vbe` recovers
+# voices_bounded(anchor, v, n) == True{} from b == True{}: the call
+# site always passes b = voices_bounded(anchor, v, n) itself, but a
+# generic Bool parameter forgets that once matched, so vbe carries the
+# connection back in (the caller always supplies {==} for it).
+def solve_chain_pick_bounded(b: Bool, on_true: Maybe<&2, List<&2, +List<Pc.Note>>>, v: +List<Pc.Note>,
+  +anchor: +List<Pc.Note>, +n: Nat, sol: List<&2, +List<Pc.Note>>,
+  vbe: {VL.voices_bounded(anchor, v, n) == b : Bool},
+  e: {VL.solve_chain_pick(b, on_true, v) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>},
+  ih: @vs: List<&2, +List<Pc.Note>> -> {on_true == Some{vs} : Maybe<&2, List<&2, +List<Pc.Note>>>} ->
+    {VL.chain_bounded(vs, v, n) == True{} : Bool}) ->
+  {VL.chain_bounded(sol, anchor, n) == True{} : Bool}:
+  match b on_true:
+    case True{} None{}:
+      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
+    case True{} Some{+vs}:
+      es = some_inj(List<&2, +List<Pc.Note>>, v <> vs, sol, e)
+      # es : {v <> vs == sol : List<&2, +List<Pc.Note>>}
+      ok = ih(vs, {==})
+      # ok : {VL.chain_bounded(vs, v, n) == True{} : Bool}
+      # vbe : {VL.voices_bounded(anchor, v, n) == True{} : Bool}
+      c1 = Equal.cong(Bool, Bool, z => z && VL.chain_bounded(vs, v, n), VL.voices_bounded(anchor, v, n), True{}, vbe)
+      # c1 : {voices_bounded(anchor,v,n) && chain_bounded(vs,v,n) == True{} && chain_bounded(vs,v,n) : Bool}
+      c2 = Equal.cong(Bool, Bool, z => True{} && z, VL.chain_bounded(vs, v, n), True{}, ok)
+      # c2 : {True{} && chain_bounded(vs,v,n) == True{} && True{} : Bool}
+      combined = Equal.trans(Bool, VL.voices_bounded(anchor, v, n) && VL.chain_bounded(vs, v, n),
+        True{} && VL.chain_bounded(vs, v, n), True{}, c1, c2)
+      # combined : {voices_bounded(anchor,v,n) && chain_bounded(vs,v,n) == True{} : Bool}
+      # i.e. {chain_bounded(v<>vs, anchor, n) == True{} : Bool}
+      %es : {VL.chain_bounded(_, anchor, n) == True{} : Bool}
+      combined
+    case False{} None{}:
+      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
+    case False{} Some{vs}:
+      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
+
+def Laws.solve_chain_bounded(chords, n, anchor, sol, e):
+  match chords:
+    case Nil{}:
+      es = some_inj(List<&2, +List<Pc.Note>>, Nil{}, sol, e)
+      # es : {Nil{} == sol : List<&2, +List<Pc.Note>>}
+      %es : {VL.chain_bounded(_, anchor, n) == True{} : Bool}
+      {==}
+    case c <> +rest:
+      +v = VL.harden(Ch.notes(c))
+      solve_chain_pick_bounded(VL.voices_bounded(anchor, v, n), VL.solve_chain(rest, n, v), v, anchor, n, sol,
+        {==}, e, vs => e2 => Laws.solve_chain_bounded(rest, n, v, vs, e2))

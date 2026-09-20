@@ -21,6 +21,7 @@ bend src/note.bend --check-only
 bend src/chord.bend --check-only
 bend src/negharm.bend --check-only
 bend src/voicing.bend --check-only
+bend src/voicelead.bend --check-only
 ```
 
 ## Status by milestone
@@ -169,9 +170,72 @@ musically unused, fallback.)
 Run `bend PROOF.bend` from the repo root to check all eight laws (three
 from Milestone 1, three from Milestone 2, two from Milestone 3).
 
-### Milestones 4-5
+### Milestone 4 — Voice leading: core law proved; the parallel wrapper is implemented, not (yet) proved
 
-Not started yet: voice leading (4), the exercise-generator CLI (5).
+`src/voicelead.bend`.
+
+**Model.** `dist(x, y)` is circular pitch-class distance (0..6), built from
+`Nat.sub`/`Nat.min`, no `Nat.mod` needed. `voices_bounded(xs, ys, n)` checks
+every corresponding pair of two same-length note lists is within `n`
+semitones; `chain_bounded(sol, anchor, n)` extends that down a whole list of
+voicings, starting from a given anchor.
+
+`solve_chain(chords, n, anchor)` walks a progression and, for each chord,
+uses its closed/root-position voicing, failing (`None`) the moment that
+voicing isn't within `n` of the previous one. **This was originally a
+genuine search** over a chord's several inversions (`candidates`,
+`Ch.invert_times`, still in the file), trying each until one was bounded,
+then continuing with the rest of the progression. That algorithm hit a hard
+Bend restriction: a function must be defined before its first use, and
+mutual recursion is disallowed outright — but "try a candidate, and on
+success continue processing the rest of the chords" is inherently two
+phases that each call back into the other. Merging them into one function
+(the guide's own suggested fix) using an eager-unconditional-both-branches
+technique (borrowed from `demos/proof_insertion_sort`'s `dec`/`insert`,
+which sidesteps a different instance of "can't match a computed value")
+worked and typechecked, but made the resulting function's own correctness
+proof (four mutually-recursive-shaped cases, each computing two candidate
+continuations eagerly) look substantially harder than the single-candidate
+version. Given "a law proved beats a feature," the search was descoped to
+one fixed candidate per chord — weaker, but its boundedness law is a plain
+structural induction on the chord list, fully proved below. Restoring a
+real multi-candidate search *with* a proof is future work; the language
+restriction that blocks the direct approach, and the merge technique that
+gets around it, are worth knowing about either way.
+
+`solve_parallel(chords, n, anchor)` is the divide-and-conquer version the
+milestone asks for: split the progression in half, and run `solve_chain` on
+each half via a parallel call (`left_res right_res = solve_chain(...)
+solve_chain(...)`; call it as `solve_parallel!(...)` to run the split on
+the GPU). Because `solve_chain` no longer searches, a chord's chosen
+voicing never depends on the anchor it's approached from (only whether it's
+*accepted* does) — so the right half's anchor (the closed voicing of the
+left half's last chord) is computable directly from the chord list, with
+no need to wait for the left half's own result. That is what makes the two
+halves genuinely independent rather than one waiting on the other.
+Implemented and manually verified (a 4-chord progression run through it
+matches running it through `solve_chain` directly), but **its own
+boundedness is not proved**: doing so needs two more lemmas beyond
+`solve_chain`'s own (that `solve_chain`'s output multiset, restricted to
+knowing only chord data, ends on the closed voicing of the progression's
+last chord; and that `chain_bounded` composes across a list append) — each
+roughly comparable in size to the proof already done for `solve_chain`, and
+not completed here.
+
+**Law proved** (`LAWS.bend`, proof in `PROOF.bend`):
+
+- `solve_chain_bounded`: whenever `solve_chain` finds a solution, no voice
+  in it ever moves more than `n` semitones between two consecutive chords
+  (including the move from the given starting anchor into the first
+  chord). The proof needed generic `Maybe` lemmas (`Some` is injective,
+  `None ≠ Some`, both via the guide's constructor-discrimination-by-motive
+  technique) since matching a computed value is disallowed and the search
+  logic (`solve_chain_pick`) has to be its own function taking `Bool`/
+  `Maybe` as plain parameters — see `PROOF.bend`.
+
+### Milestone 5
+
+Not started yet: the exercise-generator CLI.
 
 ## Known compiler friction (not a Bend issue report yet)
 
@@ -203,5 +267,31 @@ Not started yet: voice leading (4), the exercise-generator CLI (5).
   Milestone 2's inversion proof needed `+List<Nat>` throughout
   `chord.bend`.
 
-No compiler crashes or incomprehensible errors were hit in Milestones 1-2;
+- A `match` can only scrutinize a parameter or a variable bound by a
+  pattern — never a computed value, a plain `let` binding (`b = f(x);
+  match b:` is rejected with the same message as matching `f(x)` directly),
+  or a destructuring `let` on a computed value (`(a, b) = f(x)` hits it
+  too, not just `match`). Every one of these needs a small named helper
+  whose own parameter is the computed value, matched there instead. Also,
+  a function must be defined before its first use (no forward references
+  anywhere, not just for recursion), so genuine mutual recursion — even
+  the indirect kind this project's proofs kept running into, where a
+  boolean/`Maybe` dispatch helper (forced to exist by the rule above) needs
+  to call back into the function that called it — has no fix short of
+  merging the two into one function (`bend guide`'s own advice). None of
+  this produced a bad error message once understood, but it took a few
+  rounds with the compiler each time to see what was actually being asked.
+- Multi-scrutinee `match a b:` requires `a b` in the exact order the
+  parameters were declared in the enclosing `def`'s signature, even when
+  neither is otherwise involved — this project's error was generic ("this
+  name is a def or a consumed binder") until the fix (reorder the `def`'s
+  parameters, or the `match`, to agree) was found by trial.
+- A datatype's own kind (`Data` vs `Type`) is chosen once at its `type
+  ... is Data:`/`is Type:` declaration and applies everywhere that type is
+  used; `Chord` started `is Type` (Milestone 1-3's code never needed to
+  reuse one) and had to become `is Data` once Milestone 4's helpers needed
+  to reuse a chord within one function body — a one-line, fully
+  backward-compatible change, since `Data` only adds capability.
+
+No compiler crashes or incomprehensible errors were hit in Milestones 1-4;
 no GitHub issue filed yet.

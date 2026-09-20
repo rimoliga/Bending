@@ -12,7 +12,7 @@
 import Base
 import ./note.bend as Pc
 
-type Chord is Type:
+type Chord is Data:
   Chord{root: Pc.Note, intervals: +List<Nat>}
 
 # the absolute notes reachable from root by each interval in ivs
