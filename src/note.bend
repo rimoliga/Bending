@@ -123,3 +123,25 @@ def show(n: Note) -> String:
       "Bb"
     case B{}:
       "B"
+
+# parses a note name ("C", "Db", ... "B"); None on anything else
+def read_step(eq: Bool, val: Note, next: Maybe<&2, Note>) -> Maybe<&2, Note>:
+  match eq:
+    case True{}:
+      Some{val}
+    case False{}:
+      next
+
+def read(+s: String) -> Maybe<&2, Note>:
+  read_step(String.eq(s, "C"), C{},
+    read_step(String.eq(s, "Db"), Db{},
+      read_step(String.eq(s, "D"), D{},
+        read_step(String.eq(s, "Eb"), Eb{},
+          read_step(String.eq(s, "E"), E{},
+            read_step(String.eq(s, "F"), F{},
+              read_step(String.eq(s, "Gb"), Gb{},
+                read_step(String.eq(s, "G"), G{},
+                  read_step(String.eq(s, "Ab"), Ab{},
+                    read_step(String.eq(s, "A"), A{},
+                      read_step(String.eq(s, "Bb"), Bb{},
+                        read_step(String.eq(s, "B"), B{}, None{}))))))))))))

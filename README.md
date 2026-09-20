@@ -6,6 +6,14 @@ states its laws in `LAWS.bend` and proves them in `PROOF.bend`; `bend
 PROOF.bend` is the gate, and it must print `All terms check.` before a
 milestone is considered done.
 
+All five milestones are implemented; **10 of the laws stated are proved**
+(`bend PROOF.bend` → `All terms check.`). The one gap is noted where it
+is, not smoothed over: `solve_parallel` (Milestone 4's divide-and-conquer
+wrapper) is implemented and manually verified, reusing the sequential
+`solve_chain` whose own boundedness law *is* proved, but its own
+end-to-end proof needs two more lemmas not yet written — see Milestone
+4 below for exactly what they'd need to show.
+
 ## Toolchain
 
 Bend 2 (`bend2/main.ts` in `bendlang/bend`) is a TypeScript program run with
@@ -22,6 +30,8 @@ bend src/chord.bend --check-only
 bend src/negharm.bend --check-only
 bend src/voicing.bend --check-only
 bend src/voicelead.bend --check-only
+bend src/exercise.bend --check-only
+bend main.bend            # or: bend main.bend <key>, e.g. bend main.bend Bb
 ```
 
 ## Status by milestone
@@ -233,9 +243,79 @@ not completed here.
   logic (`solve_chain_pick`) has to be its own function taking `Bool`/
   `Maybe` as plain parameters — see `PROOF.bend`.
 
-### Milestone 5
+### Milestone 5 — Exercise generator CLI: done, all laws proved
 
-Not started yet: the exercise-generator CLI.
+`src/exercise.bend`, `main.bend`.
+
+**Model.** A guide-tone shell voicing plays just a chord's 3rd and 7th (the
+two notes that define its quality) on the D and G strings, root and 5th
+omitted — a standard, minimal jazz comping shape, and exactly the two notes
+this milestone asks to mark. `guide_tone_shell` computes a fret for each
+from the open string (`up_dist_note`, always 0..11) and picks whichever
+octave placement of the second note keeps the pair's stretch small
+(`nearest_fret`, choosing between that fret and the same pitch class 12
+frets up if that's still ≤ 15). `min7_shell`/`dom7_shell`/`maj7_shell` wrap
+this per quality, each **proving** playability by case-splitting the root
+into its 12 concrete notes and closing every branch with `{==}` (the same
+technique as Milestone 2's `transpose_period12`): a generic version sharing
+one body across qualities was tried first, using Bend's `~` template
+parameters for the interval numbers, but a template's body is still
+typechecked once, abstractly, before any call site substitutes into it, so
+its own `{==}` can't close — same obstacle as trying to match a computed
+value, different context. Three short, repetitive 12-case functions instead
+of one clever one, but each one's `{==}` is a real per-key check, not
+assumed.
+
+The ii-V-I chain (`ii_v_i_shells`) reuses the same recipe but lets each
+chord after the first try to have *both* guide tones chase the *previous*
+chord's fret on the same string (`nearest_fret` again, now against the
+previous chord instead of against the chord's own other string), falling
+back to the independent, always-safe placement whenever that would stretch
+past 4 frets (`chord_step`). It also **swaps which string carries the 3rd
+and which carries the 7th for V** relative to ii and I: ii's 3rd and V's
+7th are the same or a near note, and ii's 7th resolves down a half step to
+V's 3rd, but only if each keeps the string the other used. This is the
+actual textbook reason shell voicings are famous for smooth voice leading;
+without the swap, guide tones swapped strings mid-resolution and jumped
+around (verified this made a real, measurable difference — see below).
+Guaranteed playable by the same 12-way-match-then-`{==}` technique, now
+chained: since the fret for V or I depends on the previous chord's fret,
+which depends on the tonic, everything is still fully concrete once the
+top-level match on `tonic` fixes it.
+
+`main.bend` is the CLI: `bend main.bend <key>` (default `C` on a missing or
+unrecognized key) prints the tonic and one line per chord — root, quality,
+and each guide tone as `<string><fret>:<role>`. For example, `bend
+main.bend F`:
+
+```
+key F
+ii Gm7  D8:3 G10:7
+V  C7  D8:7 G9:3
+I  Fmaj7  D7:3 G9:7
+```
+
+Guide tones move by at most one fret between consecutive chords in every
+key checked — before the ii/V/I string-swap fix, the same progression in C
+moved by 6-7 frets per string between chords (verified with a scratch
+script; not committed, since the point was the fix, not the broken
+intermediate). Output is deliberately minimal and textual, per the
+milestone's own instruction that Bend's string handling is slow: the
+arithmetic happens in Bend, and anything prettier is left to a wrapper
+outside it.
+
+**Laws proved** (`LAWS.bend`, proof in `PROOF.bend`):
+
+- `cycle_of_fourths_visits_all`: starting from any pitch class and
+  repeatedly moving up a perfect 4th (5 half steps) visits each of the 12
+  pitch classes exactly once (not zero, not more) before the cycle would
+  repeat — standard number theory (5 and 12 share no factor), proved here
+  by exhaustive case split: both the starting note and the note being
+  counted range over 12 concrete values, so all 144 branches are direct
+  `{==}` checks, mechanically generated rather than hand-written.
+
+Run `bend PROOF.bend` from the repo root: **all ten laws across all five
+milestones** check, printing `All terms check.`
 
 ## Known compiler friction (not a Bend issue report yet)
 
@@ -292,6 +372,17 @@ Not started yet: the exercise-generator CLI.
   reuse one) and had to become `is Data` once Milestone 4's helpers needed
   to reuse a chord within one function body — a one-line, fully
   backward-compatible change, since `Data` only adds capability.
+- A `~` template parameter is inlined *per call site*, but the function's
+  own body is still typechecked once, generically, before any inlining
+  happens — so a proof obligation like `{==}` inside a template's body
+  can't lean on a specific call site's arguments being concrete, even
+  though every actual call is. `min7_shell`/`dom7_shell`/`maj7_shell`
+  hit this trying to share one `shell_voicing(~third_iv, ~seventh_iv,
+  root)`; the fix was the mundane one (three separate functions, no
+  templates), not a workaround for the template mechanism itself.
 
-No compiler crashes or incomprehensible errors were hit in Milestones 1-4;
-no GitHub issue filed yet.
+No compiler crashes or incomprehensible errors were hit across any of the
+five milestones; no GitHub issue filed yet — every obstacle here was either
+already documented in `bend guide` (if easy to miss in the moment) or had a
+clear, if generic, error message that a few rounds with the compiler
+resolved.

@@ -9,6 +9,7 @@ import ./src/note.bend as Pc
 import ./src/chord.bend as Ch
 import ./src/negharm.bend as Nh
 import ./src/voicelead.bend as VL
+import ./src/exercise.bend as Ex
 
 # Milestone 1: pitch classes
 # ==========================
@@ -104,3 +105,14 @@ law solve_chain_bounded:
   for sol: List<&2, +List<Pc.Note>>
   for e: {VL.solve_chain(chords, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}
   {VL.chain_bounded(sol, anchor, n) == True{} : Bool}
+
+# Milestone 5: exercise generator
+# ================================
+
+# LAW: starting anywhere and repeatedly moving by a perfect 4th visits
+# every one of the 12 pitch classes exactly once (count 1, for every
+# pitch class, not zero and not more) before the cycle would repeat.
+law cycle_of_fourths_visits_all:
+  for start: Pc.Note
+  for x: Pc.Note
+  {Ch.count(x, Ex.cycle_of_fourths(start)) == 1n : Nat}

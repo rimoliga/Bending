@@ -7,6 +7,7 @@ import ./src/note.bend as Pc
 import ./src/chord.bend as Ch
 import ./src/negharm.bend as Nh
 import ./src/voicelead.bend as VL
+import ./src/exercise.bend as Ex
 import ./LAWS.bend as Laws
 
 # Nat helpers
@@ -459,3 +460,327 @@ def Laws.solve_chain_bounded(chords, n, anchor, sol, e):
       +v = VL.harden(Ch.notes(c))
       solve_chain_pick_bounded(VL.voices_bounded(anchor, v, n), VL.solve_chain(rest, n, v), v, anchor, n, sol,
         {==}, e, vs => e2 => Laws.solve_chain_bounded(rest, n, v, vs, e2))
+
+# Milestone 5: exercise generator
+# =================================
+
+# cycle_of_fourths_visits_all: exhaustive case split. Both start and x
+# range over the 12 concrete notes, so cycle_of_fourths(start) fully
+# computes to a 12-element concrete list and count(x, that list) fully
+# computes to a literal in every one of the 144 branches -- a direct
+# {==} each time, the same technique as transpose_period12 and
+# mirror_involution, just over two notes instead of one.
+def Laws.cycle_of_fourths_visits_all(start, x):
+  match start:
+    case Pc.C{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.Db{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.D{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.Eb{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.E{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.F{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.Gb{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.G{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.Ab{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.A{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.Bb{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
+    case Pc.B{}:
+      match x:
+        case Pc.C{}:
+          {==}
+        case Pc.Db{}:
+          {==}
+        case Pc.D{}:
+          {==}
+        case Pc.Eb{}:
+          {==}
+        case Pc.E{}:
+          {==}
+        case Pc.F{}:
+          {==}
+        case Pc.Gb{}:
+          {==}
+        case Pc.G{}:
+          {==}
+        case Pc.Ab{}:
+          {==}
+        case Pc.A{}:
+          {==}
+        case Pc.Bb{}:
+          {==}
+        case Pc.B{}:
+          {==}
