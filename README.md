@@ -520,8 +520,21 @@ byte-identical to what it was before this extension.
   root)`; the fix was the mundane one (three separate functions, no
   templates), not a workaround for the template mechanism itself.
 
-No compiler crashes or incomprehensible errors were hit across any of the
-five milestones; no GitHub issue filed yet — every obstacle here was either
-already documented in `bend guide` (if easy to miss in the moment) or had a
-clear, if generic, error message that a few rounds with the compiler
-resolved.
+No compiler crashes or incomprehensible errors were hit anywhere in this
+project. Every obstacle above was either already documented in `bend guide`
+(if easy to miss in the moment) or had a clear, if generic, error message
+that a few rounds with the compiler resolved — with one exception, the
+template one, which is written up as a bug report in
+[`ISSUE_DRAFT.md`](ISSUE_DRAFT.md).
+
+**That report is written and verified but not filed**: this environment's
+GitHub access is scoped to this repository, so creating an issue on
+`bendlang/bend` was refused, and neither attaching that repository to the
+session nor a `gh` CLI was available. The draft is ready to paste as-is; it
+searched the tracker first (#784 and #902 are different template problems),
+states the mechanism, and asks for one of three concrete outcomes. Its three
+runnable repro files are in [`tools/issue_repro/`](tools/issue_repro):
+`template_proof.bend` fails, `template_proof_uncalled.bend` fails *identically
+with no call site at all* — the clearest evidence that the body is checked
+once rather than per instantiation — and `template_proof_workaround.bend`
+checks.
