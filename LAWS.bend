@@ -116,6 +116,35 @@ law solve_parallel_bounded:
   for e: {VL.solve_parallel(chords, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}
   {VL.chain_bounded(sol, anchor, n) == True{} : Bool}
 
+# LAW: solve_from_each_anchor solves the right half from every
+# candidate anchor independently -- the result for candidate `h` (the
+# head of the candidate list) is exactly what solve_chain itself would
+# return for that anchor, and the rest of the result list is the same
+# computation over the rest of the candidates. This holds position by
+# position, by induction on the candidate list.
+law solve_from_each_anchor_sound:
+  for h: +List<Pc.Note>
+  for t: List<&2, +List<Pc.Note>>
+  for +right: +List<Ch.Chord>
+  for +n: Nat
+  {VL.solve_from_each_anchor(h <> t, right, n) ==
+    VL.solve_chain(right, n, h) <> VL.solve_from_each_anchor(t, right, n) :
+    List<&2, Maybe<&2, List<&2, +List<Pc.Note>>>>}
+
+# LAW: solve_parallel is equal to solve_chain -- not just bounded when
+# it succeeds, but exactly the same result, for every progression,
+# every n and every anchor. This is what makes the split-and-solve-
+# every-candidate-anchor design a genuine replacement for guessing:
+# no progression that solve_chain can solve is ever lost to a bad
+# guess, and no progression solve_chain fails on is ever wrongly
+# accepted, because the two functions are provably interchangeable.
+law solve_parallel_eq_solve_chain:
+  for +chords: +List<Ch.Chord>
+  for +n: Nat
+  for +anchor: +List<Pc.Note>
+  {VL.solve_parallel(chords, n, anchor) == VL.solve_chain(chords, n, anchor) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}
+
 # Milestone 5: exercise generator
 # ================================
 

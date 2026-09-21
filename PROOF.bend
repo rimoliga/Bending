@@ -886,8 +886,8 @@ def and_true_r(a: Bool, +b: Bool, e: {Bool.and(a, b) == True{} : Bool}) -> {b ==
     case False{}:
       Empty.absurd({b == True{} : Bool}, false_ne_true(e))
 
-# last_of / chain_bounded_append
-# -------------------------------
+# last_of
+# -------
 
 # last_of(v <> vs, anchor) == last_of(vs, v): both sides reduce to the
 # same term whether vs is empty (both give v) or not (both give
@@ -901,122 +901,736 @@ def last_of_cons(v: +List<Pc.Note>, vs: List<&2, +List<Pc.Note>>, +anchor: +List
     case h2 <> t2:
       {==}
 
-# chain_bounded_append: if xs's own chain (from anchor) is bounded, and
-# ys's chain (from xs's own last voicing, or anchor if xs is empty) is
-# bounded, so is the chain of xs ++ ys (from anchor). Induction on xs.
-def chain_bounded_append(xs: List<&2, +List<Pc.Note>>, ys: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>, +n: Nat,
-  +bx: {VL.chain_bounded(xs, anchor, n) == True{} : Bool},
-  by: {VL.chain_bounded(ys, VL.last_of(xs, anchor), n) == True{} : Bool}) ->
-  {VL.chain_bounded(VL.append_sol(xs, ys), anchor, n) == True{} : Bool}:
+# Note/list equality
+# -------------------
+# solve_parallel's seam is now a value comparison (VL.select_result,
+# via VL.list_note_eq), not a guess-then-verify, so the proof needs a
+# soundness fact about that comparison: two note lists that compare
+# list_note_eq really are the same list. Pc.Note is a closed
+# 12-constructor enum with no arithmetic of its own; going through
+# `index` and an explicit left inverse (`note_from_index`) turns
+# "index(a) == index(b)" into "a == b" by congruence in 12 cases,
+# instead of the 144 a head-on case split on both a and b would need.
+
+def note_from_index(k: Nat) -> Pc.Note:
+  match k:
+    case 0n:
+      Pc.C{}
+    case 1n:
+      Pc.Db{}
+    case 2n:
+      Pc.D{}
+    case 3n:
+      Pc.Eb{}
+    case 4n:
+      Pc.E{}
+    case 5n:
+      Pc.F{}
+    case 6n:
+      Pc.Gb{}
+    case 7n:
+      Pc.G{}
+    case 8n:
+      Pc.Ab{}
+    case 9n:
+      Pc.A{}
+    case 10n:
+      Pc.Bb{}
+    case 11n:
+      Pc.B{}
+    case 1n+p:
+      Pc.C{}
+
+# note_from_index is a left inverse of index on every real note (the
+# 1n+p catch-all above, for indices >= 12, never arises from index(n)
+# itself, so it never needs a case here).
+def note_from_index_index(n: Pc.Note) -> {note_from_index(Pc.index(n)) == n : Pc.Note}:
+  match n:
+    case Pc.C{}:
+      {==}
+    case Pc.Db{}:
+      {==}
+    case Pc.D{}:
+      {==}
+    case Pc.Eb{}:
+      {==}
+    case Pc.E{}:
+      {==}
+    case Pc.F{}:
+      {==}
+    case Pc.Gb{}:
+      {==}
+    case Pc.G{}:
+      {==}
+    case Pc.Ab{}:
+      {==}
+    case Pc.A{}:
+      {==}
+    case Pc.Bb{}:
+      {==}
+    case Pc.B{}:
+      {==}
+
+def pc_index_inj(+a: Pc.Note, +b: Pc.Note, e: {Pc.index(a) == Pc.index(b) : Nat}) -> {a == b : Pc.Note}:
+  ca = note_from_index_index(a)
+  cb = note_from_index_index(b)
+  ce = Equal.cong(Nat, Pc.Note, note_from_index, Pc.index(a), Pc.index(b), e)
+  # ce : note_from_index(index(a)) == note_from_index(index(b))
+  step1 = Equal.trans(Pc.Note, a, note_from_index(Pc.index(a)), note_from_index(Pc.index(b)),
+    Equal.sym(Pc.Note, note_from_index(Pc.index(a)), a, ca), ce)
+  # step1 : a == note_from_index(index(b))
+  Equal.trans(Pc.Note, a, note_from_index(Pc.index(b)), b, step1, cb)
+
+def nat_is_eq_refl(k: Nat) -> {Nat.is_eq(k, k) == True{} : Bool}:
+  match k:
+    case 0n:
+      {==}
+    case 1n+p:
+      nat_is_eq_refl(p)
+
+def nat_is_eq_sound(x: Nat, y: Nat, e: {Nat.is_eq(x, y) == True{} : Bool}) -> {x == y : Nat}:
+  match x:
+    case 0n:
+      match y:
+        case 0n:
+          {==}
+        case 1n+q:
+          Empty.absurd({0n == 1n+q : Nat}, false_ne_true(e))
+    case 1n+p:
+      match y:
+        case 0n:
+          Empty.absurd({1n+p == 0n : Nat}, false_ne_true(e))
+        case 1n+q:
+          %(nat_is_eq_sound(p, q, e)) : {1n+p == 1n+_ : Nat}
+          {==}
+
+def pc_is_eq_sound(+a: Pc.Note, +b: Pc.Note, e: {Pc.is_eq(a, b) == True{} : Bool}) -> {a == b : Pc.Note}:
+  pc_index_inj(a, b, nat_is_eq_sound(Pc.index(a), Pc.index(b), e))
+
+def pc_is_eq_refl(a: Pc.Note) -> {Pc.is_eq(a, a) == True{} : Bool}:
+  nat_is_eq_refl(Pc.index(a))
+
+# note-list discrimination (Nil vs Cons), the guide's motive technique
+def note_list_disc(xs: +List<Pc.Note>) -> Type:
   match xs:
     case Nil{}:
-      by
-    case +h <> +t:
-      # bx : {voices_bounded(anchor,h,n) && chain_bounded(t,h,n) == True{} : Bool}
-      bh = and_true_l(VL.voices_bounded(anchor, h, n), VL.chain_bounded(t, h, n), bx)
-      bt = and_true_r(VL.voices_bounded(anchor, h, n), VL.chain_bounded(t, h, n), bx)
-      # by : {chain_bounded(ys, last_of(h<>t, anchor), n) == True{} : Bool}
-      byt_e = last_of_cons(h, t, anchor)
-      byt_c = Equal.cong(+List<Pc.Note>, Bool, z => VL.chain_bounded(ys, z, n),
-        VL.last_of(h <> t, anchor), VL.last_of(t, h), byt_e)
-      byt = Equal.trans(Bool, VL.chain_bounded(ys, VL.last_of(t, h), n),
-        VL.chain_bounded(ys, VL.last_of(h <> t, anchor), n), True{},
-        Equal.sym(Bool, VL.chain_bounded(ys, VL.last_of(h <> t, anchor), n),
-          VL.chain_bounded(ys, VL.last_of(t, h), n), byt_c), by)
-      # byt : {chain_bounded(ys, last_of(t,h), n) == True{} : Bool}
-      ih = chain_bounded_append(t, ys, h, n, bt, byt)
-      # ih : {chain_bounded(append_sol(t,ys), h, n) == True{} : Bool}
-      c1 = Equal.cong(Bool, Bool, z => Bool.and(z, VL.chain_bounded(VL.append_sol(t, ys), h, n)),
-        VL.voices_bounded(anchor, h, n), True{}, bh)
-      c2 = Equal.cong(Bool, Bool, z => Bool.and(True{}, z), VL.chain_bounded(VL.append_sol(t, ys), h, n), True{}, ih)
-      Equal.trans(Bool, Bool.and(VL.voices_bounded(anchor, h, n), VL.chain_bounded(VL.append_sol(t, ys), h, n)),
-        Bool.and(True{}, VL.chain_bounded(VL.append_sol(t, ys), h, n)), True{}, c1, c2)
+      Unit
+    case h <> t:
+      Empty
 
-# chain_bounded_reanchor
-# ----------------------
-# The seam lemma. A chain that is bounded from one anchor `a` is
-# bounded from a different anchor `b` as soon as the single step from
-# `b` into the chain's first voicing is itself within bound
-# (VL.seam_ok) -- everything after that first step never mentions the
-# anchor at all. This is what lets solve_parallel search its right
-# half from a guessed anchor and still conclude something about the
-# real one, once the two halves meet and the seam is checked.
-def chain_bounded_reanchor(ys: List<&2, +List<Pc.Note>>, +a: +List<Pc.Note>, +b: +List<Pc.Note>, +n: Nat,
-  e1: {VL.chain_bounded(ys, a, n) == True{} : Bool},
-  e2: {VL.seam_ok(ys, b, n) == True{} : Bool}) ->
-  {VL.chain_bounded(ys, b, n) == True{} : Bool}:
-  match ys:
+def nil_ne_cons_notes(h: Pc.Note, t: +List<Pc.Note>, e: {Nil{} == h <> t : +List<Pc.Note>}) -> Empty:
+  %e : note_list_disc(_)
+  Unit{}
+
+def cons_ne_nil_notes(h: Pc.Note, t: +List<Pc.Note>, e: {h <> t == Nil{} : +List<Pc.Note>}) -> Empty:
+  nil_ne_cons_notes(h, t, Equal.sym(+List<Pc.Note>, h <> t, Nil{}, e))
+
+def list_note_eq_refl(xs: +List<Pc.Note>) -> {VL.list_note_eq(xs, xs) == True{} : Bool}:
+  match xs:
     case Nil{}:
       {==}
-    case +h <> +t:
-      # e1 : {voices_bounded(a,h,n) && chain_bounded(t,h,n) == True{} : Bool}
-      bt = and_true_r(VL.voices_bounded(a, h, n), VL.chain_bounded(t, h, n), e1)
-      # e2 : {voices_bounded(b,h,n) == True{} : Bool}
-      c1 = Equal.cong(Bool, Bool, z => z && VL.chain_bounded(t, h, n), VL.voices_bounded(b, h, n), True{}, e2)
-      c2 = Equal.cong(Bool, Bool, z => True{} && z, VL.chain_bounded(t, h, n), True{}, bt)
-      Equal.trans(Bool, VL.voices_bounded(b, h, n) && VL.chain_bounded(t, h, n),
-        True{} && VL.chain_bounded(t, h, n), True{}, c1, c2)
+    case +h <> t:
+      c1 = Equal.cong(Bool, Bool, z => z && VL.list_note_eq(t, t), Pc.is_eq(h, h), True{}, pc_is_eq_refl(h))
+      c2 = Equal.cong(Bool, Bool, z => True{} && z, VL.list_note_eq(t, t), True{}, list_note_eq_refl(t))
+      Equal.trans(Bool, Pc.is_eq(h, h) && VL.list_note_eq(t, t), True{} && VL.list_note_eq(t, t), True{}, c1, c2)
 
-# solve_parallel_bounded
-# ------------------------
-# join_pick_inv: join_pick only returns Some when the seam check
-# passed, so on the success path `sbe` (supplied as {==} by the one
-# call site) says seam_ok(rs, last_of(ls, anchor), n) == True{}.
-# chain_bounded_reanchor then moves the right half's own bound from
-# the guessed anchor `mid` onto the left half's real last voicing, and
-# chain_bounded_append glues the two halves.
-def join_pick_inv(ok: Bool, +ls: List<&2, +List<Pc.Note>>, +rs: List<&2, +List<Pc.Note>>,
-  sol: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>, +n: Nat, +mid: +List<Pc.Note>,
-  sbe: {VL.seam_ok(rs, VL.last_of(ls, anchor), n) == ok : Bool},
-  e: {VL.join_pick(ok, ls, rs) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>},
-  bl: {VL.chain_bounded(ls, anchor, n) == True{} : Bool},
-  br: {VL.chain_bounded(rs, mid, n) == True{} : Bool}) ->
-  {VL.chain_bounded(sol, anchor, n) == True{} : Bool}:
-  match ok:
+def list_note_eq_sound(xs: +List<Pc.Note>, ys: +List<Pc.Note>, +e: {VL.list_note_eq(xs, ys) == True{} : Bool}) ->
+  {xs == ys : +List<Pc.Note>}:
+  match xs:
+    case Nil{}:
+      match ys:
+        case Nil{}:
+          {==}
+        case hy <> ty:
+          Empty.absurd({Nil{} == hy <> ty : +List<Pc.Note>}, false_ne_true(e))
+    case +hx <> +tx:
+      match ys:
+        case Nil{}:
+          Empty.absurd({hx <> tx == Nil{} : +List<Pc.Note>}, false_ne_true(e))
+        case +hy <> +ty:
+          # e : {is_eq(hx,hy) && list_note_eq(tx,ty) == True{} : Bool}
+          eh = and_true_l(Pc.is_eq(hx, hy), VL.list_note_eq(tx, ty), e)
+          et = and_true_r(Pc.is_eq(hx, hy), VL.list_note_eq(tx, ty), e)
+          ch = pc_is_eq_sound(hx, hy, eh)
+          ct = list_note_eq_sound(tx, ty, et)
+          c1 = Equal.cong(Pc.Note, +List<Pc.Note>, z => z <> tx, hx, hy, ch)
+          c2 = Equal.cong(+List<Pc.Note>, +List<Pc.Note>, z => hy <> z, tx, ty, ct)
+          Equal.trans(+List<Pc.Note>, hx <> tx, hy <> tx, hy <> ty, c1, c2)
+
+# solve_chain_append: solve_chain is compositional
+# ---------------------------------------------------
+# solve_chain(xs++right, n, anchor) is exactly what you'd get by
+# solving xs first and, if that succeeds, solving right from xs's own
+# last voicing (or anchor, if xs is empty) and appending the two
+# solutions -- a fact purely about solve_chain's own chord-by-chord
+# recursion, with no mention of solve_parallel yet. This is the piece
+# that makes solve_parallel's split provably lossless: it says what
+# the *sequential* answer would be if you split it by hand.
+
+def append_chords(xs: +List<Ch.Chord>, ys: +List<Ch.Chord>) -> +List<Ch.Chord>:
+  match xs:
+    case Nil{}:
+      ys
+    case c <> t:
+      c <> append_chords(t, ys)
+
+# identical in shape to VL.solve_parallel_finish (both: None -> None,
+# Some{r} -> Some{append_sol(sol_left,r)}) -- reused directly below so
+# that solve_parallel's own finish step and this reference combiner's
+# are the *same* function, not two definitions that need a lemma to
+# relate.
+def solve_chain_combine(l: Maybe<&2, List<&2, +List<Pc.Note>>>, +right: +List<Ch.Chord>, +n: Nat,
+  +anchor: +List<Pc.Note>) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
+  match l:
+    case None{}:
+      None{}
+    case Some{+sol_left}:
+      +real_anchor = VL.last_of(sol_left, anchor)
+      VL.solve_parallel_finish(VL.solve_chain(right, n, real_anchor), sol_left)
+
+def solve_chain_step_none_l(rest_sol: Maybe<&2, List<&2, +List<Pc.Note>>>) ->
+  {VL.solve_chain_step(None{}, rest_sol) == None{} : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match rest_sol:
+    case None{}:
+      {==}
+    case Some{vs}:
+      {==}
+
+# append_sol(Nil{},sol)==sol reduces on its own, but combine_finish
+# still wraps a match around its first argument, so combine_finish(m,
+# Nil{}) needs m's shape known before it collapses back to m itself.
+def solve_parallel_finish_nil(m: Maybe<&2, List<&2, +List<Pc.Note>>>) ->
+  {VL.solve_parallel_finish(m, Nil{}) == m : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match m:
+    case None{}:
+      {==}
+    case Some{sol}:
+      {==}
+
+# transports an equation between two functions of a shared argument
+# along an equality of that argument -- the same rewrite Equal.cong
+# uses, generalized from one function to a difference of two.
+def transport_eq2(-A: Type, -B: Type, -f: A -> B, -g: A -> B, -a: A, -b: A, e: {a == b : A},
+  h: {f(a) == g(a) : B}) -> {f(b) == g(b) : B}:
+  %e : {f(_) == g(_) : B}
+  h
+
+# solve_chain_step(Some{w}, combine_finish(x,sol_a)) == combine_finish(x, w<>sol_a),
+# by cases on x alone -- append_sol(h<>t,ys)==h<>append_sol(t,ys) makes
+# both sides reduce to the same cons once x's shape is known.
+def solve_chain_step_combine_swap_at(x: Maybe<&2, List<&2, +List<Pc.Note>>>, sol_a: List<&2, +List<Pc.Note>>,
+  w: +List<Pc.Note>) -> {VL.solve_chain_step(Some{w}, VL.solve_parallel_finish(x, sol_a)) ==
+    VL.solve_parallel_finish(x, w <> sol_a) : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match x:
+    case None{}:
+      {==}
+    case Some{sol_right}:
+      {==}
+
+# the Some{sol_a} case of solve_chain_step_combine_swap: reanchor via
+# last_of_cons (last_of(w<>sol_a,anchor) == last_of(sol_a,w), so the
+# right half is searched from the same voicing either way), then
+# dispatch on that shared right-half result via the lemma above.
+def solve_chain_step_combine_swap_some(+sol_a: List<&2, +List<Pc.Note>>, +w: +List<Pc.Note>, +right: +List<Ch.Chord>,
+  +n: Nat, +anchor: +List<Pc.Note>) -> {VL.solve_chain_step(Some{w}, solve_chain_combine(Some{sol_a}, right, n, w)) ==
+    solve_chain_combine(VL.solve_chain_step(Some{w}, Some{sol_a}), right, n, anchor) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  ec = last_of_cons(w, sol_a, anchor)
+  # ec : {last_of(w<>sol_a,anchor) == last_of(sol_a,w) : +List<Pc.Note>}
+  ecc = Equal.cong(+List<Pc.Note>, Maybe<&2, List<&2, +List<Pc.Note>>>, z => VL.solve_chain(right, n, z),
+    VL.last_of(w <> sol_a, anchor), VL.last_of(sol_a, w), ec)
+  step2 = Equal.cong(Maybe<&2, List<&2, +List<Pc.Note>>>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+    z => VL.solve_parallel_finish(z, w <> sol_a), VL.solve_chain(right, n, VL.last_of(w <> sol_a, anchor)),
+    VL.solve_chain(right, n, VL.last_of(sol_a, w)), ecc)
+  # step2 : {combine(Some{w<>sol_a},right,n,anchor) == combine_finish(X, w<>sol_a)} where X = solve_chain(right,n,last_of(sol_a,w))
+  step3 = solve_chain_step_combine_swap_at(VL.solve_chain(right, n, VL.last_of(sol_a, w)), sol_a, w)
+  # step3 : {solve_chain_step(Some{w}, combine(Some{sol_a},right,n,w)) == combine_finish(X, w<>sol_a)}
+  Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>,
+    VL.solve_chain_step(Some{w}, solve_chain_combine(Some{sol_a}, right, n, w)),
+    VL.solve_parallel_finish(VL.solve_chain(right, n, VL.last_of(sol_a, w)), w <> sol_a),
+    solve_chain_combine(VL.solve_chain_step(Some{w}, Some{sol_a}), right, n, anchor),
+    step3, Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>,
+      solve_chain_combine(VL.solve_chain_step(Some{w}, Some{sol_a}), right, n, anchor),
+      VL.solve_parallel_finish(VL.solve_chain(right, n, VL.last_of(sol_a, w)), w <> sol_a), step2))
+
+def solve_chain_step_combine_swap(a: Maybe<&2, List<&2, +List<Pc.Note>>>, w: +List<Pc.Note>, +right: +List<Ch.Chord>,
+  +n: Nat, +anchor: +List<Pc.Note>) -> {VL.solve_chain_step(Some{w}, solve_chain_combine(a, right, n, w)) ==
+    solve_chain_combine(VL.solve_chain_step(Some{w}, a), right, n, anchor) : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match a:
+    case None{}:
+      {==}
+    case Some{sol_a}:
+      solve_chain_step_combine_swap_some(sol_a, w, right, n, anchor)
+
+def solve_chain_step_append_at(a: Maybe<&2, List<&2, +List<Pc.Note>>>, b: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  w: +List<Pc.Note>, +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
+  ih: {b == solve_chain_combine(a, right, n, w) : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.solve_chain_step(Some{w}, b) == solve_chain_combine(VL.solve_chain_step(Some{w}, a), right, n, anchor) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  step1 = Equal.cong(Maybe<&2, List<&2, +List<Pc.Note>>>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+    z => VL.solve_chain_step(Some{w}, z), b, solve_chain_combine(a, right, n, w), ih)
+  step2 = solve_chain_step_combine_swap(a, w, right, n, anchor)
+  Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_chain_step(Some{w}, b),
+    VL.solve_chain_step(Some{w}, solve_chain_combine(a, right, n, w)),
+    solve_chain_combine(VL.solve_chain_step(Some{w}, a), right, n, anchor), step1, step2)
+
+# Some{w}: solve_chain_step(Some{w}, A) == None if A is None, Some{w<>a}
+# if A is Some{a}. So the goal reduces to combining a match on the
+# recursive `solve_chain(rest,n,w)` and `solve_chain(append_chords(rest,right),n,w)` --
+# handled by cases on that recursive result (Maybe<voicing list>), via
+# ih (the induction hypothesis, restated at anchor v = w by the caller).
+def solve_chain_step_append_some(+w: +List<Pc.Note>, +rest: +List<Ch.Chord>, +right: +List<Ch.Chord>, +n: Nat,
+  +anchor: +List<Pc.Note>,
+  ih: {VL.solve_chain(append_chords(rest, right), n, w) ==
+    solve_chain_combine(VL.solve_chain(rest, n, w), right, n, w) : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.solve_chain_step(Some{w}, VL.solve_chain(append_chords(rest, right), n, w)) ==
+    solve_chain_combine(VL.solve_chain_step(Some{w}, VL.solve_chain(rest, n, w)), right, n, anchor) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  solve_chain_step_append_at(VL.solve_chain(rest, n, w), VL.solve_chain(append_chords(rest, right), n, w),
+    w, right, n, anchor, ih)
+
+# solve_chain_step_append: the step case of solve_chain_append, with
+# `chosen` (the current chord's search result) taken as an explicit
+# parameter so it can be matched -- mirrors solve_chain_step_bounded's
+# own dispatch, but concludes an equality of results, not a bound.
+def solve_chain_step_append(chosen: Maybe<&2, +List<Pc.Note>>, +v: +List<Pc.Note>, +rest: +List<Ch.Chord>,
+  +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
+  hv: @w: +List<Pc.Note> -> {chosen == Some{w} : Maybe<&2, +List<Pc.Note>>} -> {v == w : +List<Pc.Note>},
+  ih: {VL.solve_chain(append_chords(rest, right), n, v) ==
+    solve_chain_combine(VL.solve_chain(rest, n, v), right, n, v) : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.solve_chain_step(chosen, VL.solve_chain(append_chords(rest, right), n, v)) ==
+    solve_chain_combine(VL.solve_chain_step(chosen, VL.solve_chain(rest, n, v)), right, n, anchor) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match chosen:
+    case None{}:
+      c1 = solve_chain_step_none_l(VL.solve_chain(append_chords(rest, right), n, v))
+      c2 = solve_chain_step_none_l(VL.solve_chain(rest, n, v))
+      c2c = Equal.cong(Maybe<&2, List<&2, +List<Pc.Note>>>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+        z => solve_chain_combine(z, right, n, anchor), VL.solve_chain_step(None{}, VL.solve_chain(rest, n, v)),
+        None{}, c2)
+      # c2c : {solve_chain_combine(solve_chain_step(None,solve_chain(rest,n,v)),right,n,anchor) ==
+      #        solve_chain_combine(None{},right,n,anchor) : Maybe<...>}
+      Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_chain_step(None{}, VL.solve_chain(append_chords(rest, right), n, v)),
+        None{}, solve_chain_combine(VL.solve_chain_step(None{}, VL.solve_chain(rest, n, v)), right, n, anchor),
+        c1, Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>,
+          solve_chain_combine(VL.solve_chain_step(None{}, VL.solve_chain(rest, n, v)), right, n, anchor),
+          solve_chain_combine(None{}, right, n, anchor), c2c))
+    case Some{+w}:
+      +ev = hv(w, {==})
+      # ev : {v == w : +List<Pc.Note>}
+      ih_w = transport_eq2(+List<Pc.Note>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+        z => VL.solve_chain(append_chords(rest, right), n, z),
+        z => solve_chain_combine(VL.solve_chain(rest, n, z), right, n, z), v, w, ev, ih)
+      result_w = solve_chain_step_append_some(w, rest, right, n, anchor, ih_w)
+      transport_eq2(+List<Pc.Note>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+        z => VL.solve_chain_step(Some{w}, VL.solve_chain(append_chords(rest, right), n, z)),
+        z => solve_chain_combine(VL.solve_chain_step(Some{w}, VL.solve_chain(rest, n, z)), right, n, anchor),
+        w, v, Equal.sym(+List<Pc.Note>, v, w, ev), result_w)
+
+def solve_chain_append(xs: +List<Ch.Chord>, +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
+  {VL.solve_chain(append_chords(xs, right), n, anchor) ==
+    solve_chain_combine(VL.solve_chain(xs, n, anchor), right, n, anchor) : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match xs:
+    case Nil{}:
+      Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_parallel_finish(VL.solve_chain(right, n, anchor), Nil{}),
+        VL.solve_chain(right, n, anchor), solve_parallel_finish_nil(VL.solve_chain(right, n, anchor)))
+    case c <> +rest:
+      +chosen = VL.search(VL.candidates(c), anchor, n)
+      +v = VL.from_maybe_v(chosen, Nil{})
+      solve_chain_step_append(chosen, v, rest, right, n, anchor,
+        w => e2 => from_maybe_some(chosen, Nil{}, w, e2),
+        solve_chain_append(rest, right, n, v))
+
+# split_at_append: splitting a progression and appending the two
+# halves back together is the identity -- the fact that lets
+# solve_chain_append apply to solve_parallel's own split.
+def append_chords_pair(pair: +List<Ch.Chord> & +List<Ch.Chord>) -> +List<Ch.Chord>:
+  match pair:
+    case (l, r):
+      append_chords(l, r)
+
+def split_cons_append(c: Ch.Chord, pair: +List<Ch.Chord> & +List<Ch.Chord>, t: +List<Ch.Chord>,
+  ih: {append_chords_pair(pair) == t : +List<Ch.Chord>}) ->
+  {append_chords_pair(VL.split_cons(c, pair)) == c <> t : +List<Ch.Chord>}:
+  match pair:
+    case (l, r):
+      Equal.cong(+List<Ch.Chord>, +List<Ch.Chord>, z => c <> z, append_chords(l, r), t, ih)
+
+def split_at_append(k: Nat, xs: +List<Ch.Chord>) -> {append_chords_pair(VL.split_at(k, xs)) == xs : +List<Ch.Chord>}:
+  match k xs:
+    case 0n Nil{}:
+      {==}
+    case 0n c <> +t:
+      {==}
+    case 1n+p Nil{}:
+      {==}
+    case 1n+ +p c <> +t:
+      split_cons_append(c, VL.split_at(p, t), t, split_at_append(p, t))
+
+# select_result agreement with search
+# --------------------------------------
+# The candidate-selection machinery agrees with search itself: on the
+# one call path that ever matters (right_results built by
+# solve_from_each_anchor over the very candidate list search walked),
+# select_result recovers exactly the same result solve_chain would
+# have computed directly from search's own chosen voicing. No re-run
+# of search and no value comparison against "the real answer" is
+# needed elsewhere -- this is the one place the seam's correctness
+# reduces to.
+
+def select_result_pick_true(b: Bool, r: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  rest: Maybe<&2, List<&2, +List<Pc.Note>>>, e: {b == True{} : Bool}) ->
+  {VL.select_result_pick(b, r, rest) == r : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match b:
     case True{}:
-      es = some_inj(List<&2, +List<Pc.Note>>, VL.append_sol(ls, rs), sol, e)
-      # es : {append_sol(ls, rs) == sol : List<&2, +List<Pc.Note>>}
-      br2 = chain_bounded_reanchor(rs, mid, VL.last_of(ls, anchor), n, br, sbe)
-      # br2 : {chain_bounded(rs, last_of(ls, anchor), n) == True{} : Bool}
-      combined = chain_bounded_append(ls, rs, anchor, n, bl, br2)
-      # combined : {chain_bounded(append_sol(ls, rs), anchor, n) == True{} : Bool}
-      %es : {VL.chain_bounded(_, anchor, n) == True{} : Bool}
-      combined
+      {==}
     case False{}:
-      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
+      Empty.absurd({VL.select_result_pick(b, r, rest) == r : Maybe<&2, List<&2, +List<Pc.Note>>>}, false_ne_true(e))
 
-def join_sol_inv(l: Maybe<&2, List<&2, +List<Pc.Note>>>, r: Maybe<&2, List<&2, +List<Pc.Note>>>,
-  sol: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>, +n: Nat, +mid: +List<Pc.Note>,
-  e: {VL.join_sol(l, r, anchor, n) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>},
-  bl: @ls: List<&2, +List<Pc.Note>> -> {l == Some{ls} : Maybe<&2, List<&2, +List<Pc.Note>>>} ->
-    {VL.chain_bounded(ls, anchor, n) == True{} : Bool},
-  br: @rs: List<&2, +List<Pc.Note>> -> {r == Some{rs} : Maybe<&2, List<&2, +List<Pc.Note>>>} ->
-    {VL.chain_bounded(rs, mid, n) == True{} : Bool}) ->
-  {VL.chain_bounded(sol, anchor, n) == True{} : Bool}:
-  match l r:
-    case None{} None{}:
-      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
-    case None{} Some{rs}:
-      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
-    case Some{ls} None{}:
-      Empty.absurd({VL.chain_bounded(sol, anchor, n) == True{} : Bool}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
-    case Some{+ls} Some{+rs}:
-      join_pick_inv(VL.seam_ok(rs, VL.last_of(ls, anchor), n), ls, rs, sol, anchor, n, mid, {==}, e,
-        bl(ls, {==}), br(rs, {==}))
+# dispatches select_result_pick(b2, solve_chain(right,n,h), rest) to
+# solve_chain(right,n,w), given rest already equals it: if b2 is True,
+# w and h coincide by value (list_note_eq_sound) so solve_chain(right,
+# n,h) is the same call; if False, rest's own equality (ihw) closes it.
+def select_result_pick_dispatch(b2: Bool, h: +List<Pc.Note>, w: +List<Pc.Note>, +right: +List<Ch.Chord>, +n: Nat,
+  rest: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  vbe2: {VL.list_note_eq(w, h) == b2 : Bool},
+  ihw: {rest == VL.solve_chain(right, n, w) : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.select_result_pick(b2, VL.solve_chain(right, n, h), rest) == VL.solve_chain(right, n, w) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match b2:
+    case True{}:
+      hw = list_note_eq_sound(w, h, vbe2)
+      # hw : {w == h : +List<Pc.Note>}
+      Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_chain(right, n, w), VL.solve_chain(right, n, h),
+        Equal.cong(+List<Pc.Note>, Maybe<&2, List<&2, +List<Pc.Note>>>, z => VL.solve_chain(right, n, z), w, h, hw))
+    case False{}:
+      ihw
 
-def solve_parallel_split_bounded(pair: +List<Ch.Chord> & +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
+def search_select_agree_pick(b: Bool, +h: +List<Pc.Note>, +t: List<&2, +List<Pc.Note>>, +right: +List<Ch.Chord>,
+  +n: Nat, +anchor: +List<Pc.Note>, +w: +List<Pc.Note>,
+  vbe: {VL.voices_bounded(anchor, h, n) == b : Bool},
+  e: {VL.search_pick(b, h, VL.search(t, anchor, n)) == Some{w} : Maybe<&2, +List<Pc.Note>>},
+  ih: @w2: +List<Pc.Note> -> {VL.search(t, anchor, n) == Some{w2} : Maybe<&2, +List<Pc.Note>>} ->
+    {VL.select_result(t, VL.solve_from_each_anchor(t, right, n), w2) == VL.solve_chain(right, n, w2) :
+      Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.select_result(h <> t, VL.solve_from_each_anchor(h <> t, right, n), w) == VL.solve_chain(right, n, w) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match b:
+    case True{}:
+      +ew = some_inj(+List<Pc.Note>, h, w, e)
+      # ew : {h == w : +List<Pc.Note>}
+      lwb = Equal.trans(Bool, VL.list_note_eq(w, h), VL.list_note_eq(h, h), True{},
+        Equal.cong(+List<Pc.Note>, Bool, z => VL.list_note_eq(z, h), w, h, Equal.sym(+List<Pc.Note>, h, w, ew)),
+        list_note_eq_refl(h))
+      # lwb : {list_note_eq(w,h) == True{} : Bool}
+      sp = select_result_pick_true(VL.list_note_eq(w, h), VL.solve_chain(right, n, h),
+        VL.select_result(t, VL.solve_from_each_anchor(t, right, n), w), lwb)
+      # sp : {select_result_pick(list_note_eq(w,h), solve_chain(right,n,h), ...) == solve_chain(right,n,h)}
+      Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>,
+        VL.select_result_pick(VL.list_note_eq(w, h), VL.solve_chain(right, n, h),
+          VL.select_result(t, VL.solve_from_each_anchor(t, right, n), w)),
+        VL.solve_chain(right, n, h), VL.solve_chain(right, n, w), sp,
+        Equal.cong(+List<Pc.Note>, Maybe<&2, List<&2, +List<Pc.Note>>>, z => VL.solve_chain(right, n, z), h, w, ew))
+    case False{}:
+      ihw = ih(w, e)
+      # ihw : {select_result(t, solve_from_each_anchor(t,right,n), w) == solve_chain(right,n,w)}
+      select_result_pick_dispatch(VL.list_note_eq(w, h), h, w, right, n,
+        VL.select_result(t, VL.solve_from_each_anchor(t, right, n), w), {==}, ihw)
+
+def search_select_agree(cs: List<&2, +List<Pc.Note>>, +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
+  w: +List<Pc.Note>, e: {VL.search(cs, anchor, n) == Some{w} : Maybe<&2, +List<Pc.Note>>}) ->
+  {VL.select_result(cs, VL.solve_from_each_anchor(cs, right, n), w) == VL.solve_chain(right, n, w) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match cs:
+    case Nil{}:
+      Empty.absurd({VL.select_result(cs, VL.solve_from_each_anchor(cs, right, n), w) == VL.solve_chain(right, n, w) :
+        Maybe<&2, List<&2, +List<Pc.Note>>>}, none_ne_some(+List<Pc.Note>, w, e))
+    case +h <> +t:
+      search_select_agree_pick(VL.voices_bounded(anchor, h, n), h, t, right, n, anchor, w, {==}, e,
+        w2 => e2 => search_select_agree(t, right, n, anchor, w2, e2))
+
+# solve_chain_left_selects_right
+# ---------------------------------
+# The main seam lemma: whenever solve_chain solves a left half `xs`
+# from `anchor`, picking the right-half result out of
+# solve_from_each_anchor's precomputed list -- by the left half's own
+# real last voicing -- gives exactly what solve_chain would have
+# computed for the right half directly from that voicing. This is
+# what makes the selection in solve_parallel_combine a genuine
+# replacement for running the right half sequentially, rather than a
+# guess: combined with solve_chain_append it shows the split-and-
+# select design computes the same thing solve_chain does in one pass.
+
+# a nonempty chord list's last chord always exists -- CPS-style (a
+# continuation taking the witness and its proof) rather than returning
+# a dependent pair, so callers never need to destructure a computed
+# value.
+def last_chord_some(-A: Type, t: +List<Ch.Chord>, c: Ch.Chord,
+  k: @w: Ch.Chord -> {VL.last_chord(c <> t) == Some{w} : Maybe<&2, Ch.Chord>} -> A) -> A:
+  match t:
+    case Nil{}:
+      k(c, {==})
+    case c2 <> t2:
+      last_chord_some(A, t2, c2, k)
+
+# pick_anchor_list ignores its anchor argument once the chord is known
+# (Some{w}): both sides reduce to candidates(w) regardless of a or b.
+def pick_anchor_list_indep(w: Ch.Chord, +a: +List<Pc.Note>, +b: +List<Pc.Note>) ->
+  {VL.pick_anchor_list(Some{w}, a) == VL.pick_anchor_list(Some{w}, b) : List<&2, +List<Pc.Note>>}:
+  {==}
+
+# xs = [c]: solve_chain([c],n,anchor) = solve_chain_step(chosen, Some{Nil{}}),
+# so it only succeeds (chosen = Some{w}) with sol = [w]; last_of([w],anchor)
+# = w, last_chord([c]) = Some{c}, and search_select_agree closes it.
+def case_last_chord(c: Ch.Chord, chosen: Maybe<&2, +List<Pc.Note>>, +right: +List<Ch.Chord>, +n: Nat,
+  +anchor: +List<Pc.Note>, sol: List<&2, +List<Pc.Note>>,
+  e: {VL.solve_chain_step(chosen, VL.solve_chain(Nil{}, n, VL.from_maybe_v(chosen, Nil{}))) == Some{sol} :
+    Maybe<&2, List<&2, +List<Pc.Note>>>},
+  hb: @w2: +List<Pc.Note> -> {chosen == Some{w2} : Maybe<&2, +List<Pc.Note>>} ->
+    {VL.search(VL.candidates(c), anchor, n) == Some{w2} : Maybe<&2, +List<Pc.Note>>}) ->
+  {VL.select_result(VL.pick_anchor_list(Some{c}, anchor),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(Some{c}, anchor), right, n), VL.last_of(sol, anchor)) ==
+    VL.solve_chain(right, n, VL.last_of(sol, anchor)) : Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match chosen:
+    case None{}:
+      Empty.absurd({VL.select_result(VL.pick_anchor_list(Some{c}, anchor),
+        VL.solve_from_each_anchor(VL.pick_anchor_list(Some{c}, anchor), right, n), VL.last_of(sol, anchor)) ==
+        VL.solve_chain(right, n, VL.last_of(sol, anchor)) : Maybe<&2, List<&2, +List<Pc.Note>>>},
+        none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
+    case Some{+w}:
+      +es = some_inj(List<&2, +List<Pc.Note>>, w <> Nil{}, sol, e)
+      # es : {w<>Nil{} == sol : List<&2, +List<Pc.Note>>}
+      agree = search_select_agree(VL.candidates(c), right, n, anchor, w, hb(w, {==}))
+      # agree : {select_result(candidates(c), solve_from_each_anchor(candidates(c),right,n), w) == solve_chain(right,n,w)}
+      %es : {VL.select_result(VL.pick_anchor_list(Some{c}, anchor),
+        VL.solve_from_each_anchor(VL.pick_anchor_list(Some{c}, anchor), right, n), VL.last_of(_, anchor)) ==
+        VL.solve_chain(right, n, VL.last_of(_, anchor)) : Maybe<&2, List<&2, +List<Pc.Note>>>}
+      agree
+
+# last_chord_some(c2,t2) is a computed value, so its witness pair
+# is destructured here, where it is a genuine parameter, not inline
+# at the call site.
+def case_mid_chord_finish(c2: Ch.Chord, t2: +List<Ch.Chord>, w: +List<Pc.Note>, +right: +List<Ch.Chord>, +n: Nat,
+  +anchor: +List<Pc.Note>, +vs: List<&2, +List<Pc.Note>>, sol: List<&2, +List<Pc.Note>>,
+  es: {w <> vs == sol : List<&2, +List<Pc.Note>>},
+  eloc: {VL.last_of(w <> vs, anchor) == VL.last_of(vs, w) : +List<Pc.Note>},
+  ih: {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w), right, n), VL.last_of(vs, w)) ==
+    VL.solve_chain(right, n, VL.last_of(vs, w)) : Maybe<&2, List<&2, +List<Pc.Note>>>},
+  w0: Ch.Chord, +ew0: {VL.last_chord(c2 <> t2) == Some{w0} : Maybe<&2, Ch.Chord>}) ->
+  {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+    VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+      +indep = pick_anchor_list_indep(w0, w, anchor)
+      # indep : {pick_anchor_list(Some{w0},w) == pick_anchor_list(Some{w0},anchor)}
+      al_eq = Equal.trans(List<&2, +List<Pc.Note>>, VL.pick_anchor_list(VL.last_chord(c2 <> t2), w),
+        VL.pick_anchor_list(Some{w0}, w), VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+        Equal.cong(Maybe<&2, Ch.Chord>, List<&2, +List<Pc.Note>>, m => VL.pick_anchor_list(m, w),
+          VL.last_chord(c2 <> t2), Some{w0}, ew0),
+        Equal.trans(List<&2, +List<Pc.Note>>, VL.pick_anchor_list(Some{w0}, w), VL.pick_anchor_list(Some{w0}, anchor),
+          VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), indep,
+          Equal.sym(List<&2, +List<Pc.Note>>, VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+            VL.pick_anchor_list(Some{w0}, anchor),
+            Equal.cong(Maybe<&2, Ch.Chord>, List<&2, +List<Pc.Note>>, m => VL.pick_anchor_list(m, anchor),
+              VL.last_chord(c2 <> t2), Some{w0}, ew0))))
+      # al_eq : {pick_anchor_list(last_chord(c2<>t2),w) == pick_anchor_list(last_chord(c2<>t2),anchor)}
+      cong_al = Equal.cong(List<&2, +List<Pc.Note>>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+        z => VL.select_result(z, VL.solve_from_each_anchor(z, right, n), VL.last_of(vs, w)),
+        VL.pick_anchor_list(VL.last_chord(c2 <> t2), w), VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), al_eq)
+      # cong_al : {select_result(AL_w, ..., last_of(vs,w)) == select_result(AL_anchor, ..., last_of(vs,w))}
+      final_w = Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>,
+        VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+          VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+          VL.last_of(vs, w)),
+        VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w),
+          VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w), right, n), VL.last_of(vs, w)),
+        VL.solve_chain(right, n, VL.last_of(vs, w)), Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>,
+          VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w),
+            VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w), right, n), VL.last_of(vs, w)),
+          VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+            VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+            VL.last_of(vs, w)), cong_al), ih)
+      # final_w : {select_result(pick_anchor_list(last_chord(c2<>t2),anchor), ..., last_of(vs,w)) == solve_chain(right,n,last_of(vs,w))}
+      %es : {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+        VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+        VL.last_of(_, anchor)) == VL.solve_chain(right, n, VL.last_of(_, anchor)) :
+        Maybe<&2, List<&2, +List<Pc.Note>>>}
+      %(Equal.sym(+List<Pc.Note>, VL.last_of(w <> vs, anchor), VL.last_of(vs, w), eloc)) :
+        {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+          VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n), _) ==
+          VL.solve_chain(right, n, _) : Maybe<&2, List<&2, +List<Pc.Note>>>}
+      final_w
+
+def case_mid_chord_at(+c2: Ch.Chord, +t2: +List<Ch.Chord>, +w: +List<Pc.Note>, +right: +List<Ch.Chord>, +n: Nat,
+  +anchor: +List<Pc.Note>, rest_res: Maybe<&2, List<&2, +List<Pc.Note>>>, +sol: List<&2, +List<Pc.Note>>,
+  ers: {VL.solve_chain(c2 <> t2, n, w) == rest_res : Maybe<&2, List<&2, +List<Pc.Note>>>},
+  e: {VL.solve_chain_step(Some{w}, rest_res) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>},
+  ih_provider: @vs2: List<&2, +List<Pc.Note>> -> {VL.solve_chain(c2 <> t2, n, w) == Some{vs2} :
+    Maybe<&2, List<&2, +List<Pc.Note>>>} -> {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w), right, n), VL.last_of(vs2, w)) ==
+    VL.solve_chain(right, n, VL.last_of(vs2, w)) : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+    VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match rest_res:
+    case None{}:
+      Empty.absurd({VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+        VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+        VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+        Maybe<&2, List<&2, +List<Pc.Note>>>}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e))
+    case Some{+vs}:
+      +es = some_inj(List<&2, +List<Pc.Note>>, w <> vs, sol, e)
+      # es : {w<>vs == sol : List<&2, +List<Pc.Note>>}
+      +eloc = last_of_cons(w, vs, anchor)
+      # eloc : {last_of(w<>vs,anchor) == last_of(vs,w) : +List<Pc.Note>}
+      ih = ih_provider(vs, ers)
+      last_chord_some({VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+          VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+          VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+          Maybe<&2, List<&2, +List<Pc.Note>>>}, t2, c2,
+        w0 => ew0 => case_mid_chord_finish(c2, t2, w, right, n, anchor, vs, sol, es, eloc, ih, w0, ew0))
+
+# xs = c<>(c2<>t2): reanchor last_chord(c2<>t2)'s candidate list from
+# the intermediate voicing w onto the outer anchor (pick_anchor_list_indep,
+# using the witness that a nonempty tail always has a last chord), then
+# apply the induction hypothesis at w. ih_provider is the recursive
+# call, supplied by solve_chain_left_selects_right itself (as a
+# closure) so this function never calls it by name -- avoiding the
+# mutual recursion Bend forbids between separately named defs.
+def case_mid_chord(c: Ch.Chord, +c2: Ch.Chord, +t2: +List<Ch.Chord>, chosen: Maybe<&2, +List<Pc.Note>>,
+  +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>, sol: List<&2, +List<Pc.Note>>,
+  e: {VL.solve_chain_step(chosen, VL.solve_chain(c2 <> t2, n, VL.from_maybe_v(chosen, Nil{}))) == Some{sol} :
+    Maybe<&2, List<&2, +List<Pc.Note>>>},
+  ih_provider: @w2: +List<Pc.Note> -> @vs2: List<&2, +List<Pc.Note>> ->
+    {VL.solve_chain(c2 <> t2, n, w2) == Some{vs2} : Maybe<&2, List<&2, +List<Pc.Note>>>} ->
+    {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w2),
+      VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), w2), right, n), VL.last_of(vs2, w2)) ==
+      VL.solve_chain(right, n, VL.last_of(vs2, w2)) : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+    VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match chosen:
+    case None{}:
+      none_e = solve_chain_step_none_l(VL.solve_chain(c2 <> t2, n, VL.from_maybe_v(None{}, Nil{})))
+      # none_e : {solve_chain_step(None{}, solve_chain(c2<>t2,n,Nil{})) == None{} : Maybe<...>}
+      e2 = Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>, None{},
+        VL.solve_chain_step(None{}, VL.solve_chain(c2 <> t2, n, VL.from_maybe_v(None{}, Nil{}))), Some{sol},
+        Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>,
+          VL.solve_chain_step(None{}, VL.solve_chain(c2 <> t2, n, VL.from_maybe_v(None{}, Nil{}))), None{}, none_e), e)
+      Empty.absurd({VL.select_result(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor),
+        VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(c2 <> t2), anchor), right, n),
+        VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+        Maybe<&2, List<&2, +List<Pc.Note>>>}, none_ne_some(List<&2, +List<Pc.Note>>, sol, e2))
+    case Some{+w}:
+      case_mid_chord_at(c2, t2, w, right, n, anchor, VL.solve_chain(c2 <> t2, n, w), sol, {==}, e,
+        ih_provider(w))
+
+def solve_chain_left_selects_right(xs: +List<Ch.Chord>, +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
   sol: List<&2, +List<Pc.Note>>,
-  e: {VL.solve_parallel_split(pair, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
-  {VL.chain_bounded(sol, anchor, n) == True{} : Bool}:
+  e: {VL.solve_chain(xs, n, anchor) == Some{sol} : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.select_result(VL.pick_anchor_list(VL.last_chord(xs), anchor),
+    VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(xs), anchor), right, n),
+    VL.last_of(sol, anchor)) == VL.solve_chain(right, n, VL.last_of(sol, anchor)) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match xs:
+    case Nil{}:
+      +es = some_inj(List<&2, +List<Pc.Note>>, Nil{}, sol, e)
+      # es : {Nil{} == sol : List<&2, +List<Pc.Note>>}
+      sp = select_result_pick_true(VL.list_note_eq(anchor, anchor), VL.solve_chain(right, n, anchor), None{},
+        list_note_eq_refl(anchor))
+      # sp : {select_result_pick(list_note_eq(anchor,anchor), solve_chain(right,n,anchor), None{}) == solve_chain(right,n,anchor)}
+      base = Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>,
+        VL.select_result_pick(VL.list_note_eq(anchor, anchor), VL.solve_chain(right, n, anchor), None{}),
+        VL.solve_chain(right, n, anchor), VL.solve_chain(right, n, anchor), sp, {==})
+      # base : {select_result(anchor<>Nil{}, solve_chain(right,n,anchor)<>Nil{}, anchor) == solve_chain(right,n,anchor)}
+      %es : {VL.select_result(VL.pick_anchor_list(VL.last_chord(Nil{}), anchor),
+        VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(Nil{}), anchor), right, n),
+        VL.last_of(_, anchor)) == VL.solve_chain(right, n, VL.last_of(_, anchor)) :
+        Maybe<&2, List<&2, +List<Pc.Note>>>}
+      base
+    case +c <> t:
+      match t:
+        case Nil{}:
+          +chosen = VL.search(VL.candidates(c), anchor, n)
+          case_last_chord(c, chosen, right, n, anchor, sol, e, w2 => e2 => e2)
+        case +c2 <> +t2:
+          +chosen = VL.search(VL.candidates(c), anchor, n)
+          case_mid_chord(c, c2, t2, chosen, right, n, anchor, sol, e,
+            w2 => vs2 => e2 => solve_chain_left_selects_right(c2 <> t2, right, n, w2, vs2, e2))
+
+# solve_parallel_eq_solve_chain
+# --------------------------------
+# solve_parallel_combine (voicelead.bend) and solve_chain_combine
+# (above) are the same shape one level up: both dispatch on a Maybe
+# solution and finish with VL.solve_parallel_finish, one selecting the
+# right-half result from the precomputed list, the other calling
+# solve_chain directly. solve_chain_left_selects_right is exactly the
+# fact that those two right-half values agree, so this lemma lifts it
+# from "one Maybe" to "solve_parallel_split's whole computation".
+
+def solve_parallel_combine_eq(l: Maybe<&2, List<&2, +List<Pc.Note>>>, +left: +List<Ch.Chord>,
+  +right: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
+  el: {VL.solve_chain(left, n, anchor) == l : Maybe<&2, List<&2, +List<Pc.Note>>>}) ->
+  {VL.solve_parallel_combine(l, VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(left), anchor), right, n),
+    VL.pick_anchor_list(VL.last_chord(left), anchor), anchor) == solve_chain_combine(l, right, n, anchor) :
+    Maybe<&2, List<&2, +List<Pc.Note>>>}:
+  match l:
+    case None{}:
+      {==}
+    case Some{+sol_left}:
+      +real_anchor = VL.last_of(sol_left, anchor)
+      +e_sel = solve_chain_left_selects_right(left, right, n, anchor, sol_left, el)
+      # e_sel : {select_result(pick_anchor_list(last_chord(left),anchor),
+      #            solve_from_each_anchor(pick_anchor_list(last_chord(left),anchor),right,n), real_anchor)
+      #          == solve_chain(right,n,real_anchor)}
+      Equal.cong(Maybe<&2, List<&2, +List<Pc.Note>>>, Maybe<&2, List<&2, +List<Pc.Note>>>,
+        z => VL.solve_parallel_finish(z, sol_left),
+        VL.select_result(VL.pick_anchor_list(VL.last_chord(left), anchor),
+          VL.solve_from_each_anchor(VL.pick_anchor_list(VL.last_chord(left), anchor), right, n), real_anchor),
+        VL.solve_chain(right, n, real_anchor), e_sel)
+
+def solve_parallel_split_eq(pair: +List<Ch.Chord> & +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>,
+  +chords: +List<Ch.Chord>, eapp: {append_chords_pair(pair) == chords : +List<Ch.Chord>}) ->
+  {VL.solve_parallel_split(pair, n, anchor) == VL.solve_chain(chords, n, anchor) : Maybe<&2, List<&2, +List<Pc.Note>>>}:
   match pair:
     case (+left, +right):
-      +mid = VL.pick_anchor(VL.last_chord(left), anchor)
-      join_sol_inv(VL.solve_chain(left, n, anchor), VL.solve_chain(right, n, mid), sol, anchor, n, mid, e,
-        ls => e2 => Laws.solve_chain_bounded(left, n, anchor, ls, e2),
-        rs => e2 => Laws.solve_chain_bounded(right, n, mid, rs, e2))
+      +combined = solve_parallel_combine_eq(VL.solve_chain(left, n, anchor), left, right, n, anchor, {==})
+      # combined : {solve_parallel_split((left,right),n,anchor) == solve_chain_combine(solve_chain(left,n,anchor),right,n,anchor)}
+      +sc_append = solve_chain_append(left, right, n, anchor)
+      # sc_append : {solve_chain(append_chords(left,right),n,anchor) == solve_chain_combine(solve_chain(left,n,anchor),right,n,anchor)}
+      step = Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_parallel_split((left, right), n, anchor),
+        solve_chain_combine(VL.solve_chain(left, n, anchor), right, n, anchor),
+        VL.solve_chain(append_chords(left, right), n, anchor), combined,
+        Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_chain(append_chords(left, right), n, anchor),
+          solve_chain_combine(VL.solve_chain(left, n, anchor), right, n, anchor), sc_append))
+      # step : {solve_parallel_split((left,right),n,anchor) == solve_chain(append_chords(left,right),n,anchor)}
+      %eapp : {VL.solve_parallel_split((left, right), n, anchor) == VL.solve_chain(_, n, anchor) :
+        Maybe<&2, List<&2, +List<Pc.Note>>>}
+      step
 
+def Laws.solve_from_each_anchor_sound(h, t, right, n):
+  {==}
+
+def Laws.solve_parallel_eq_solve_chain(chords, n, anchor):
+  +half = Nat.div(VL.len_chords(chords), 2n)
+  solve_parallel_split_eq(VL.split_at(half, chords), n, anchor, chords, split_at_append(half, chords))
+
+# solve_parallel_bounded is now a corollary: solve_parallel and
+# solve_chain agree exactly, so whenever solve_parallel succeeds,
+# solve_chain succeeds with the same solution, and solve_chain_bounded
+# already covers that. chain_bounded_reanchor and chain_bounded_append
+# (the old guess-then-verify seam lemmas) are gone -- there is no
+# guessed anchor left to correct for.
 def Laws.solve_parallel_bounded(chords, n, anchor, sol, e):
-  solve_parallel_split_bounded(VL.split_at(Nat.div(VL.len_chords(chords), 2n), chords), n, anchor, sol, e)
+  +eq = Laws.solve_parallel_eq_solve_chain(chords, n, anchor)
+  e2 = Equal.trans(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_chain(chords, n, anchor),
+    VL.solve_parallel(chords, n, anchor), Some{sol},
+    Equal.sym(Maybe<&2, List<&2, +List<Pc.Note>>>, VL.solve_parallel(chords, n, anchor),
+      VL.solve_chain(chords, n, anchor), eq), e)
+  Laws.solve_chain_bounded(chords, n, anchor, sol, e2)
 
 # Extension 1: half-diminished and diminished 7th chords
 # =======================================================

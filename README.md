@@ -6,13 +6,17 @@ states its laws in `LAWS.bend` and proves them in `PROOF.bend`; `bend
 PROOF.bend` is the gate, and it must print `All terms check.` before a
 milestone is considered done.
 
-All five milestones and three later extensions are implemented, and **all 14
-laws stated are proved** (`bend PROOF.bend` → `All terms check.`). Two gaps the README once documented
-rather than papered over have since been closed and are written up where they
-happened: Milestone 4's divide-and-conquer wrapper (`solve_parallel`) shipped
-with its own boundedness unproved and was closed with two more lemmas, and
-`solve_chain`'s voice-leading *search* over chord inversions — descoped once
-as blocked on mutual recursion — is now real, and proved.
+All five milestones and three later extensions are implemented, and **all 16
+laws stated are proved** (`bend PROOF.bend` → `All terms check.`). Three gaps
+the README once documented rather than papered over have since been closed
+and are written up where they happened: Milestone 4's divide-and-conquer
+wrapper (`solve_parallel`) shipped with its own boundedness unproved and was
+closed with two more lemmas; `solve_chain`'s voice-leading *search* over
+chord inversions — descoped once as blocked on mutual recursion — is now
+real, and proved; and `solve_parallel` itself, which for a while traded
+completeness for a guessed anchor, is now **provably equal to `solve_chain`**
+for every progression, every bound and every anchor — not bounded when it
+happens to succeed, but never wrong about whether it succeeds at all.
 
 ## Toolchain
 
@@ -236,59 +240,228 @@ and `from_maybe_some`, that projecting `Some{w}` gives back `w`. Those two
 are exactly what `solve_chain_step_bounded` needs where the old proof could
 appeal to the voicing being fixed.
 
-`solve_parallel(chords, n, anchor)` is the divide-and-conquer version: split
-the progression in half and run `solve_chain` on each half via a parallel
-call (`left_res right_res = solve_chain(...) solve_chain(...)`; call it as
-`solve_parallel!(...)` to run the split on the GPU). With a real search, the
-two halves are no longer independent for free — the right half's true anchor
-is whatever the left half's search chose for its last chord, which isn't
-known until the left half finishes. **So `solve_parallel` is now speculative:
-the right half is searched from a *guessed* anchor (the closed voicing of the
-left half's last chord, `pick_anchor`), and once both halves are in hand the
-seam between them is checked for real** (`seam_ok`: the right half's first
-voicing must be within `n` of the left half's *actual* last voicing);
-`join_sol` returns `None` if it isn't. That keeps the law true — the
-guarantee is about every chain `solve_parallel` does return — at the price of
-completeness: when the speculation misses, `solve_parallel` reports failure
-on a progression `solve_chain` would have solved (verified: at `n = 6` and
-`n = 5` the two agree on `C7 F7 Bb7 Eb7`; at `n = 2`, `solve_chain` finds the
-inversion chain above and `solve_parallel` returns `None`). The honest
-alternative — on a failed seam, recompute the right half from the real anchor
-— was not taken because that fallback is an *argument* to the dispatching
-function, so it would be computed on every run, including the ones where the
-speculation was right, which is exactly the sequential work the split was
-meant to avoid.
+`solve_parallel(chords, n, anchor)` was, for a while, the divide-and-conquer
+version described in the paragraphs below (still true of the git history):
+split the progression in half, run `solve_chain` on each half via a parallel
+call, and since a real search means the right half's true anchor is whatever
+the left half's search chose for its last chord — not known until the left
+half finishes — guess that anchor (the left half's last chord's closed
+voicing) and check the seam for real once both halves are in. That kept the
+boundedness law true but cost completeness: at `n = 2` on `C7 F7 Bb7 Eb7`,
+`solve_chain` finds a solution and `solve_parallel` returned `None`, because
+the guess missed the actual inversion `solve_chain`'s search would pick.
 
-The `solve_parallel` proof keeps `chain_bounded_append` (unchanged) and
-replaces `solve_chain_last` — the old "the output always ends on the closed
-voicing of the last chord" lemma, which the search makes false, and which is
-deleted rather than weakened — with `chain_bounded_reanchor`: a chain bounded
-from one anchor is bounded from a different anchor as soon as the single step
-from that anchor into the chain's first voicing is within bound, since
-nothing after that first step mentions the anchor at all. That is precisely
-what the seam check establishes, so the right half's bound (proved against
-the guess) transfers onto the left half's real last voicing, and
-`chain_bounded_append` glues the two halves.
+**That gap is now closed.** `solve_parallel` is provably **equal** to
+`solve_chain` — not just bounded when it happens to succeed, but the exact
+same result, for every progression, every `n` and every anchor. No progression
+`solve_chain` solves is ever lost to a bad guess, and none it rejects is ever
+wrongly accepted.
 
-**Laws proved** (`LAWS.bend`, proofs in `PROOF.bend`):
+#### Evaluating the idea before writing it: solve every candidate anchor, then select
 
-- `solve_chain_bounded`: whenever `solve_chain` finds a solution, no voice
-  in it ever moves more than `n` semitones between two consecutive chords
-  (including the move from the given starting anchor into the first
-  chord) — now over the output of the real inversion search, not of a
-  fixed choice. The proof needed generic `Maybe` lemmas (`Some` is
-  injective, `None ≠ Some`, both via the guide's
-  constructor-discrimination-by-motive technique) since matching a
-  computed value is disallowed and every dispatch (`search_pick`,
-  `solve_chain_step`) has to be its own function taking `Bool`/`Maybe` as
-  plain parameters, plus `search_sound` for the search itself — see
-  `PROOF.bend`.
-- `solve_parallel_bounded`: the same guarantee for `solve_parallel`'s
-  output, built from `solve_chain_bounded` (applied to each half),
-  `chain_bounded_reanchor` (to move the right half's bound from the
-  guessed anchor onto the left half's real last voicing, justified by the
-  seam check) and `chain_bounded_append` (to glue their two bounded chains
-  into one).
+The fix the task asked for evaluating first: instead of guessing *one* anchor
+for the right half, solve it from *every* anchor the left half could
+possibly hand off, and pick out the right one once the left half's real
+answer is in.
+
+- **Is the candidate-anchor set closed and finite?** Yes. Whatever
+  `solve_chain` picks for any chord is, by construction of `search`/
+  `search_pick`, literally one element of `candidates(that chord)` — a list
+  of length `Ch.chord_len(c)` (3 for a triad, 4 for a seventh chord),
+  computable from the chord alone, no search required to enumerate it. So
+  the right half's real anchor is always one of `candidates(last_chord(left))`
+  (or the progression's own anchor, if the left half is empty) — a small,
+  known-in-advance set.
+- **Does the design keep genuinely balanced parallel calls?** Only partly,
+  and it's worth saying so plainly rather than glossing over it: solving the
+  right half for *every* candidate (3–4 of them) means the right-hand branch
+  of the top-level parallel call does 3–4× the work of the left-hand branch,
+  even though both halves cover comparable-sized progressions — exactly the
+  imbalance `bend guide` warns sub-ideal speedups come from. The fan-out
+  *inside* `solve_from_each_anchor` itself is uniform (each candidate does
+  one full `solve_chain(right, ...)`), so that part is fine; it's the
+  top-level split that's lopsided. Measured in Milestone D below.
+- **A simpler alternative?** Considered fusing the right-half results
+  directly into a single traversal of the left half (thread the
+  precomputed-per-candidate results in as the left walk reaches its last
+  chord). That's more elegant on paper but **breaks the independence Bend's
+  parallel call needs**: that fused function would need the right-half
+  results as an *argument* before it can run, so it could never be one of
+  two genuinely independent branches — no real parallelism left. The design
+  that keeps real parallelism is: run `solve_chain(left, ...)` and
+  `solve_from_each_anchor(right, candidates, n)` as the two independent
+  halves of one parallel call, then do a cheap, sequential **selection**
+  (comparing the left half's actual last voicing against the candidate list
+  by value — `Pc.Note` is a closed 12-constructor enum, so this is decidable
+  and cheap) once both are in. Verified empirically before committing to it:
+  a Bend parallel call is transparent to the proof checker (`{==}` closes the
+  equality between a parallel-let and its sequential unfolding), so this
+  design costs nothing in proof weight relative to writing it sequentially.
+
+No fundamental obstacle turned up — no law needed weakening and no
+`@unsafe` was needed anywhere in this codebase.
+
+#### Hito A — `solve_from_each_anchor`: a total function over anchors
+
+```
+def solve_from_each_anchor(cs: List<&2, +List<Pc.Note>>, right: +List<Ch.Chord>, +n: Nat) ->
+  List<&2, Maybe<&2, List<&2, +List<Pc.Note>>>>
+```
+
+Given the right half and a list of candidate anchors, it returns one
+`solve_chain` result per anchor — divide and conquer directly over the
+(small) candidate list, one parallel call per cons cell (`a b =
+solve_chain(right, n, h) solve_from_each_anchor(t, right, n)`; call with `!`
+to fan out onto the GPU). Each element is independent of the others, so this
+is exactly the shape `bend guide`'s own `pow2` example uses.
+
+- `solve_from_each_anchor_sound`: the result for candidate `h` (the head of
+  the list) is exactly `solve_chain(right, n, h)`, and the rest of the
+  result list is the same computation over the rest of the candidates —
+  stated structurally (`solve_from_each_anchor(h <> t, right, n) ==
+  solve_chain(right, n, h) <> solve_from_each_anchor(t, right, n)`), so it
+  covers every position by induction rather than needing an index. The proof
+  is a bare `{==}`: Bend's checker treats a parallel-let as definitionally
+  identical to its sequential unfolding, confirmed empirically before this
+  milestone was written.
+
+#### Hito B — the seam as a selection
+
+`solve_parallel_split` now: compute `anchor_list = pick_anchor_list(last_chord(left),
+anchor)` (candidates of the left half's last chord, or `[anchor]` if the left
+half is empty); run `left_res right_results = solve_chain(left, n, anchor)
+solve_from_each_anchor(anchor_list, right, n)` as one genuine parallel call
+(neither branch needs the other's result); then, once both are in,
+`solve_parallel_combine` picks — by value, via `select_result` and
+`list_note_eq` (elementwise `Pc.Note` equality) — the entry of
+`right_results` whose anchor matches the left half's *actual* last voicing,
+and glues the two solutions together with the same `append_sol`/
+`VL.solve_parallel_finish` finishing step `solve_chain` itself would use.
+No guess, no verify-and-reject: the right answer was already computed
+alongside the left half, and the seam just looks it up.
+
+- `solve_parallel_eq_solve_chain`: `solve_parallel(chords, n, anchor) ==
+  solve_chain(chords, n, anchor)` for every progression, every `n` and every
+  anchor. The proof chains three pieces, all in `PROOF.bend`:
+  - `split_at_append`: splitting a progression and appending the two halves
+    back together is the identity (`append_chords_pair(split_at(k, xs)) ==
+    xs`), a plain structural fact about `split_at`'s own recursion.
+  - `solve_chain_append`: `solve_chain` is compositional —
+    `solve_chain(xs ++ ys, n, anchor)` is exactly what solving `xs` first
+    and, on success, solving `ys` from `xs`'s own last voicing (or `anchor`,
+    if `xs` is empty) and appending would give. This is a fact purely about
+    `solve_chain`'s own chord-by-chord recursion, with no mention of
+    `solve_parallel` — the sequential answer to "what would splitting this
+    by hand give you."
+  - `solve_chain_left_selects_right`: the seam lemma proper. Whenever
+    `solve_chain` solves a left half `xs` from `anchor`, the selection
+    (`select_result` over `solve_from_each_anchor`'s precomputed results)
+    picks out exactly what `solve_chain` would compute for the right half
+    directly from `xs`'s real last voicing. Proved by induction on `xs`,
+    bottoming out at a `search_select_agree` lemma (search's own choice is
+    literally an element of the candidate list it walks, so re-selecting by
+    value over the *same* list, with the *same* precomputed-per-candidate
+    results threaded alongside, recovers the same answer) plus a small
+    reanchoring step (`pick_anchor_list_indep`, `last_chord_some`) for
+    non-last chords, whose candidate list doesn't depend on which anchor got
+    it there. Combined with `split_at_append` and `solve_chain_append`, this
+    closes the equality.
+- `solve_parallel_bounded` is now exactly the corollary the task predicted:
+  since `solve_parallel` and `solve_chain` agree completely, whenever
+  `solve_parallel` succeeds so does `solve_chain` with the *same* solution,
+  and `solve_chain_bounded` already covers that — no seam-specific
+  boundedness argument is needed anymore.
+
+#### Hito C — cleanup, and what stayed
+
+`chain_bounded_reanchor` and `chain_bounded_append` — the lemmas that moved a
+*bound* across a guessed-then-verified seam — are gone, not left dead: there
+is no guess left to correct for, so nothing needs its bound transferred.
+`pick_anchor` (the single-guess version) and `seam_ok`/`join_pick`/`join_sol`
+(guess-then-verify) are replaced outright by `pick_anchor_list`,
+`solve_from_each_anchor`, `select_result` and `solve_parallel_combine`.
+`last_of`, `last_chord`, `append_sol`, `len_chords`, `split_cons` and
+`split_at` are unchanged and still load-bearing. `VL.solve_parallel_finish`
+is reused (not duplicated) as the reference "combine" step in the equality
+proof itself, so the two finishing steps — solve_parallel's real one and the
+proof's reference one — are the *same* function, not two functions a lemma
+has to relate.
+
+Verified by hand (`tools/` has no committed script for this — the point was
+the fix, not a throwaway harness — but the commands below reproduce it: a
+scratch file importing `src/voicelead.bend`, calling `VL.solve_chain` and
+`VL.solve_parallel` on each progression and comparing the printed results):
+
+| Progression | `n` | `solve_chain` | `solve_parallel` |
+|---|---|---|---|
+| C7 F7 Bb7 Eb7 | 2 | `Some [C E G Bb] [C Eb F A] [Bb D F Ab] [Bb Db Eb G]` | **same** (previously `None`) |
+| C7 F7 Bb7 Eb7 | 5 | `Some [C E G Bb] [F A C Eb] [Bb D F Ab] [Eb G Bb Db]` | same |
+| C7 F7 Bb7 Eb7 | 6 | `Some [C E G Bb] [F A C Eb] [Bb D F Ab] [Eb G Bb Db]` | same |
+| Dm7 G7 Cmaj7 (odd length, 3) | 2 | `Some [D F A C] [D F G B] [C E G B]` | same |
+| Dm7 G7 Cmaj7 (odd length, 3) | 6 | `Some [D F A C] [G B D F] [C E G B]` | same |
+| C7 Am7 Dm7 G7 Cmaj7 (5 chords) | 2 | `Some [C E G Bb] [C E G A] [C D F A] [B D F G] [B C E G]` | same |
+| C7 Am7 Dm7 G7 Cmaj7 (5 chords) | 6 | `Some [...]` (5 voicings) | same |
+| C7 (one chord) | 2 | `Some [C E G Bb]` | same |
+| C7 (one chord) | 6 | `Some [C E G Bb]` | same |
+| C7 F7 Bb7 Eb7 | 0 | `None` | same (agreement holds in failure too) |
+| C7 Am7 Dm7 G7 Cmaj7 | 0 | `None` | same |
+
+`n = 2` on `C7 F7 Bb7 Eb7` is the case the old README flagged as
+`solve_parallel` returning `None` where `solve_chain` succeeds; it now agrees
+exactly, including the specific inversion chain.
+
+#### Hito D — measuring the honest cost
+
+Compiled to native with `clang 18.1.3` (`bend bench.bend -o bench_native`;
+no `@unsafe`, no source changes needed — the guide's "clang 19+ with `!`"
+caveat turned out not to bite here: a `!`-using program compiled and ran
+fine on this GPU-less machine, clang 18, with no `.gpu` sidecar produced,
+falling back to CPU per `bend guide`'s own description of that case).
+No CUDA and no Metal are available in this environment (`/usr/local/cuda`
+absent, no `nvidia-smi`), so GPU numbers below are not measured, only CPU —
+plain parallel calls (no `!`) across the machine's 4 cores (`nproc`).
+
+Progressions were built by repeating the `C7 F7 Bb7 Eb7` cell; anchor is C7's
+closed voicing, `n = 6`. Times are milliseconds, `./bench_native --threads
+K`:
+
+| length | `solve_chain` (1 thread) | `solve_parallel` (1 thread) | `solve_chain` (4 threads) | `solve_parallel` (4 threads) |
+|---:|---:|---:|---:|---:|
+| 4 | 0 | 0 | 0 | 1 |
+| 16 | 0 | 0 | 0 | 0 |
+| 64 | 0 | 1 | 0 | 1 |
+| 256 | 0 | 1 | 0 | 1 |
+| 1,024 | 1 | 4 | 2 | 3 |
+| 4,096 | 6 | 16 | 6 | 8 |
+| 16,384 | 24 | 61 | 23 | 29 |
+| 65,536 | 96 | 250 | 95 | 116 |
+| 262,144 | 383 | 995 | 404 | 469 |
+
+At the lengths the task named (4–256 chords), both versions run in low
+single-digit milliseconds — too fast for either the split or the extra
+candidate-solving work to show up against process/timer noise. Scaling well
+past that (up to 262,144 chords) to get a stable signal: **`solve_parallel`
+is slower than `solve_chain` at every length tested, on this 4-core
+machine, whether run single- or multi-threaded.** Threading narrows the gap
+substantially (2.6× slower on 1 thread → 1.16× slower on 4 threads at the
+largest size), confirming the parallel calls are doing real work, but it
+never closes it, and the ratio holds roughly steady as length grows rather
+than shrinking toward 1 — consistent with the imbalance flagged in the
+evaluation above (the right-hand branch does ~4× the left-hand branch's
+work, since it solves every candidate anchor) rather than a fixed, amortizable
+startup cost. No crossover length was found up to 262,144 chords, three
+orders of magnitude past what was asked. Extrapolating from the model rather
+than hoping: with `P` cores, the right half's own 4-way candidate fan-out
+needs up to 4 cores just to bring its wall-clock down to roughly the left
+half's, and only once *that* is saturated do additional cores help the outer
+2-way split race the two halves concurrently — so on hardware with
+meaningfully more cores than the chord's own arity (4, or 3 for a triad
+progression), `solve_parallel`'s critical path should approach `max(left,
+right) ≈ half the sequential length`, beating `solve_chain`'s full pass by
+close to 2×. That regime is not reachable on this 4-core machine, and no
+number of *chords* changes that — only more cores would. An honest number
+beats a favorable demo: on this hardware, at every length asked for and
+plenty beyond it, `solve_chain` wins.
 
 ### Milestone 5 — Exercise generator CLI: done, all laws proved
 
@@ -361,9 +534,9 @@ outside it.
   counted range over 12 concrete values, so all 144 branches are direct
   `{==}` checks, mechanically generated rather than hand-written.
 
-Run `bend PROOF.bend` from the repo root: **all 11 laws across all five
+Run `bend PROOF.bend` from the repo root: **all 13 laws across all five
 milestones** check, printing `All terms check.` The three extensions below
-add three more, for **14 in total**.
+add three more, for **16 in total**.
 
 ### Extension 1 — Half-diminished and diminished 7ths: done, all laws proved
 
@@ -566,6 +739,45 @@ warning, not a silently wrong diagram.
   hit this trying to share one `shell_voicing(~third_iv, ~seventh_iv,
   root)`; the fix was the mundane one (three separate functions, no
   templates), not a workaround for the template mechanism itself.
+
+- The "no forward references, no mutual recursion" rule bites even when the
+  cycle runs through several helpers that each look purely local. Splitting
+  `solve_chain_left_selects_right`'s induction step across separate
+  `case_mid_chord`/`case_mid_chord_at` helpers (for readability) initially had
+  the innermost one call the outer lemma recursively — a genuine cycle among
+  named `def`s, since Bend checks the whole dependency graph, not just
+  "does this specific call site terminate." The fix already used earlier in
+  this project for the analogous `solve_chain_bounded` proof generalizes
+  cleanly: the recursive call is made once, at the one point in the *outer*
+  function where it's legal (self-recursion on the parameter that
+  structurally shrinks), wrapped in a closure, and passed down through the
+  helpers as an opaque function argument they *call* but never *reference by
+  name* — so the dependency graph stays a DAG even though the computation is
+  still recursive.
+- The guide's `&x:A -> B` dependent-pair syntax needs wrapping parens when
+  used as a parameter's type inside a `def`'s signature (`w: (&y: N -> {...})`,
+  per `tests/proof/exists_witness.bend` in the compiler's own test suite) —
+  without them the checker's error ("expected: an annotated term (cannot
+  infer)") gives no hint that the fix is punctuation. Destructuring one is
+  also restricted like any other match: only legal on a parameter, never on
+  a fresh computed value, so a helper that receives one and a caller that
+  builds one via a plain function call (not a witness already in hand) don't
+  mix directly. `last_chord_some` (a nonempty chord list's last chord
+  witness) sidesteps both issues by taking a continuation instead of
+  returning a pair at all — the same closure-passing shape as the mutual
+  recursion fix above, and arguably clearer for it.
+- A `Nat` successor pattern's bound variable takes its reusable-quantity `+`
+  with a space before the name, not glued to the `+` in the pattern:
+  `case 1n+ +p:`, not `case 1n+p:` with `p` used twice in the body (which
+  reports the generic "consumed more than once" on the *pattern line*, not
+  on the actual second use). Once seen, mechanical to apply everywhere else
+  it came up (`split_at_append`'s own recursion, mirroring `split_at`'s).
+- In a multi-scrutinee `match k xs: case 0n c <> t: ...; case 1n+ +p c <> +t:
+  ...`, the same positional binder (`t`, here) needs a *consistent* quantity
+  annotation across every case that binds it, even cases that don't
+  themselves reuse it — `case 0n c <> t:` (affine) alongside `case 1n+ +p c
+  <> +t:` (reusable) for the same slot was rejected, with the error again
+  pointing at an unrelated-looking line, until both cases agreed on `+t`.
 
 No compiler crashes or incomprehensible errors were hit anywhere in this
 project. Every obstacle above was either already documented in `bend guide`

@@ -172,17 +172,20 @@ def chain_bounded(sol: List<&2, +List<Pc.Note>>, anchor: +List<Pc.Note>, +n: Nat
     case +h <> t:
       voices_bounded(anchor, h, n) && chain_bounded(t, h, n)
 
-# solve_parallel: divide and conquer
-# -----------------------------------
-# Since every chord's own voicing here is always just its closed
-# position (solve_chain never searches -- see the note above), the
-# two halves of a split progression have no real data dependency on
-# each other: the anchor the right half needs is exactly the closed
-# voicing of the last chord of the left half, computable straight from
-# the chord list, without running the left half's search first. That
-# is what makes `a b = solve_chain(...) solve_chain(...)` a genuine
-# parallel call rather than one waiting on the other. Call this with
-# `!` (`solve_parallel!(...)`) to run the split on the GPU.
+# solve_parallel: divide and conquer, equal to solve_chain
+# ----------------------------------------------------------
+# The right half's real anchor is whatever voicing the left half's
+# search picks for its last chord -- not known until the left half
+# finishes. Rather than guess one anchor and verify the seam
+# afterward (which can reject progressions solve_chain would have
+# solved), solve the right half from *every* candidate anchor at
+# once: the set of voicings the left half's last chord could produce
+# is exactly `candidates(that chord)`, finite and known from the
+# chord list alone, with no search needed to enumerate it. Once the
+# left half is solved for real, pick out (by value, not by re-running
+# any search) the right-half result that was computed from the left
+# half's actual last voicing. That selection -- not a guess-then-
+# verify -- is the seam.
 
 def len_chords(xs: +List<Ch.Chord>) -> Nat:
   match xs:
@@ -218,13 +221,6 @@ def last_chord(xs: +List<Ch.Chord>) -> Maybe<&2, Ch.Chord>:
         case c2 <> t2:
           last_chord(t)
 
-def pick_anchor(m: Maybe<&2, Ch.Chord>, +anchor: +List<Pc.Note>) -> +List<Pc.Note>:
-  match m:
-    case None{}:
-      anchor
-    case Some{c}:
-      harden(Ch.notes(c))
-
 # the last voicing of sol, or anchor if sol is empty
 def last_of(sol: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>) -> +List<Pc.Note>:
   match sol:
@@ -244,47 +240,107 @@ def append_sol(xs: List<&2, +List<Pc.Note>>, ys: List<&2, +List<Pc.Note>>) -> Li
     case h <> t:
       h <> append_sol(t, ys)
 
-# the right half was searched from a *guessed* anchor (the closed
-# voicing of the left half's last chord), because the left half's real
-# answer isn't known until it finishes -- that guess is what keeps the
-# two halves independent. Now that both are in hand, the seam where
-# they meet is checked for real: the right half's first voicing must
-# be within n of the left half's actual last voicing. seam_ok is
-# vacuously true for an empty right half.
-def seam_ok(ys: List<&2, +List<Pc.Note>>, +b: +List<Pc.Note>, +n: Nat) -> Bool:
-  match ys:
+# structural equality on note lists (Pc.Note is a closed 12-way enum,
+# so this is a plain elementwise walk) -- the runtime piece that lets
+# the seam *select* the right precomputed answer instead of guessing
+# one and checking it.
+def list_note_eq(xs: +List<Pc.Note>, ys: +List<Pc.Note>) -> Bool:
+  match xs:
     case Nil{}:
-      True{}
-    case h <> t:
-      voices_bounded(b, h, n)
+      match ys:
+        case Nil{}:
+          True{}
+        case hy <> ty:
+          False{}
+    case hx <> tx:
+      match ys:
+        case Nil{}:
+          False{}
+        case hy <> ty:
+          Pc.is_eq(hx, hy) && list_note_eq(tx, ty)
 
-def join_pick(ok: Bool, ls: List<&2, +List<Pc.Note>>, rs: List<&2, +List<Pc.Note>>) ->
-  Maybe<&2, List<&2, +List<Pc.Note>>>:
-  match ok:
+# the anchors the right half could really need: every inversion of the
+# left half's last chord (candidates already enumerates exactly that,
+# finite and known from the chord alone), or just the progression's
+# own anchor if the left half is empty -- the same case pick_anchor
+# used to make, now returning the whole set instead of one guess.
+def pick_anchor_list(m: Maybe<&2, Ch.Chord>, +anchor: +List<Pc.Note>) -> List<&2, +List<Pc.Note>>:
+  match m:
+    case None{}:
+      anchor <> Nil{}
+    case Some{c}:
+      candidates(c)
+
+# solve_from_each_anchor: solve the right half from every candidate
+# anchor at once. Each element of cs is independent of the others --
+# divide and conquer over the (small, chord-arity-bounded) anchor
+# list, one parallel call per element. Call with `!` to fan out onto
+# the GPU.
+def solve_from_each_anchor(cs: List<&2, +List<Pc.Note>>, +right: +List<Ch.Chord>, +n: Nat) ->
+  List<&2, Maybe<&2, List<&2, +List<Pc.Note>>>>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      a b = solve_chain(right, n, h) solve_from_each_anchor(t, right, n)
+      a <> b
+
+def select_result_pick(b: Bool, r: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  rest: Maybe<&2, List<&2, +List<Pc.Note>>>) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
+  match b:
     case True{}:
-      Some{append_sol(ls, rs)}
+      r
     case False{}:
-      None{}
+      rest
 
-def join_sol(l: Maybe<&2, List<&2, +List<Pc.Note>>>, r: Maybe<&2, List<&2, +List<Pc.Note>>>,
-  +anchor: +List<Pc.Note>, +n: Nat) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
-  match l r:
-    case None{} None{}:
+# picks, from the results solve_from_each_anchor computed for every
+# candidate anchor, the one whose anchor really is `target` -- the
+# left half's actual last voicing (or the progression's own anchor,
+# when the left half was empty). `target` is always some element of
+# `cs` on the one way this is ever called (see solve_chain_left_selects_right
+# in PROOF.bend), so this always finds a match there; the two
+# length-mismatch cases below never arise on that path, since cs and
+# rs are always built to the same shape.
+def select_result(cs: List<&2, +List<Pc.Note>>, rs: List<&2, Maybe<&2, List<&2, +List<Pc.Note>>>>,
+  +target: +List<Pc.Note>) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
+  match cs rs:
+    case Nil{} Nil{}:
       None{}
-    case None{} Some{rs}:
+    case Nil{} r <> rt:
       None{}
-    case Some{ls} None{}:
+    case h <> t Nil{}:
       None{}
-    case Some{+ls} Some{+rs}:
-      join_pick(seam_ok(rs, last_of(ls, anchor), n), ls, rs)
+    case h <> t r <> rt:
+      select_result_pick(list_note_eq(target, h), r, select_result(t, rt, target))
+
+def solve_parallel_finish(right_res: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  sol_left: List<&2, +List<Pc.Note>>) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
+  match right_res:
+    case None{}:
+      None{}
+    case Some{sol_right}:
+      Some{append_sol(sol_left, sol_right)}
+
+# the seam is a selection, not a guess-then-verify: once the left half
+# is solved for real, look up (by value) the right-half result that
+# was computed from that real last voicing.
+def solve_parallel_combine(left_res: Maybe<&2, List<&2, +List<Pc.Note>>>,
+  right_results: List<&2, Maybe<&2, List<&2, +List<Pc.Note>>>>,
+  anchor_list: List<&2, +List<Pc.Note>>, +anchor: +List<Pc.Note>) -> Maybe<&2, List<&2, +List<Pc.Note>>>:
+  match left_res:
+    case None{}:
+      None{}
+    case Some{+sol_left}:
+      +real_anchor = last_of(sol_left, anchor)
+      solve_parallel_finish(select_result(anchor_list, right_results, real_anchor), sol_left)
 
 def solve_parallel_split(pair: +List<Ch.Chord> & +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:
   match pair:
     case (+left, right):
-      +mid_anchor = pick_anchor(last_chord(left), anchor)
-      left_res right_res = solve_chain(left, n, anchor) solve_chain(right, n, mid_anchor)
-      join_sol(left_res, right_res, anchor, n)
+      +anchor_list = pick_anchor_list(last_chord(left), anchor)
+      left_res right_results = solve_chain(left, n, anchor) solve_from_each_anchor(anchor_list, right, n)
+      solve_parallel_combine(left_res, right_results, anchor_list, anchor)
 
 def solve_parallel(+chords: +List<Ch.Chord>, +n: Nat, +anchor: +List<Pc.Note>) ->
   Maybe<&2, List<&2, +List<Pc.Note>>>:
